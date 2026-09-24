@@ -1,3 +1,169 @@
+<?php
+
+session_start();
+
+include "conexao.php";
+
+$mensagem = "";
+$tipo_mensagem = "";
+
+
+// =====================================================
+// VERIFICA SE O USUÁRIO JÁ ESTÁ LOGADO
+// =====================================================
+
+if (isset($_SESSION["ID_USUARIO"])) {
+
+    header("Location: painel.php");
+    exit;
+
+}
+
+
+// =====================================================
+// PROCESSA O LOGIN
+// =====================================================
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    $email = trim($_POST["email"] ?? "");
+    $senha = $_POST["senha"] ?? "";
+
+
+    // =================================================
+    // VALIDA OS CAMPOS
+    // =================================================
+
+    if (empty($email) || empty($senha)) {
+
+        $mensagem = "Preencha o e-mail e a senha.";
+        $tipo_mensagem = "danger";
+
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+
+        $mensagem = "Digite um e-mail válido.";
+        $tipo_mensagem = "danger";
+
+    } else {
+
+
+        // =============================================
+        // BUSCA O USUÁRIO
+        // =============================================
+
+        $sql = "SELECT
+                    ID_USUARIO,
+                    NOME,
+                    EMAIL,
+                    SENHA,
+                    ATIVO
+                FROM USUARIO
+                WHERE EMAIL = ?
+                LIMIT 1";
+
+
+        $stmt = mysqli_prepare($conexao, $sql);
+
+
+        if (!$stmt) {
+
+            $mensagem = "Erro ao preparar a consulta.";
+            $tipo_mensagem = "danger";
+
+        } else {
+
+
+            mysqli_stmt_bind_param(
+                $stmt,
+                "s",
+                $email
+            );
+
+
+            mysqli_stmt_execute($stmt);
+
+
+            $resultado = mysqli_stmt_get_result($stmt);
+
+
+            // =========================================
+            // VERIFICA SE ENCONTROU O USUÁRIO
+            // =========================================
+
+            if (mysqli_num_rows($resultado) === 1) {
+
+
+                $usuario = mysqli_fetch_assoc($resultado);
+
+
+                // =====================================
+                // VERIFICA SE A CONTA ESTÁ ATIVA
+                // =====================================
+
+                if (!$usuario["ATIVO"]) {
+
+                    $mensagem = "Sua conta está desativada.";
+                    $tipo_mensagem = "warning";
+
+                }
+
+
+                // =====================================
+                // VERIFICA A SENHA
+                // =====================================
+
+                elseif (password_verify($senha, $usuario["SENHA"])) {
+
+
+                    // =================================
+                    // CRIA UMA NOVA SESSÃO
+                    // =================================
+
+                    session_regenerate_id(true);
+
+
+                    $_SESSION["ID_USUARIO"] = $usuario["ID_USUARIO"];
+
+                    $_SESSION["NOME_USUARIO"] = $usuario["NOME"];
+
+                    $_SESSION["EMAIL_USUARIO"] = $usuario["EMAIL"];
+
+
+                    // =================================
+                    // REDIRECIONA PARA O PAINEL
+                    // =================================
+
+                    header("Location: painel.php");
+                    exit;
+
+
+                } else {
+
+                    $mensagem = "E-mail ou senha incorretos.";
+                    $tipo_mensagem = "danger";
+
+                }
+
+
+            } else {
+
+                $mensagem = "E-mail ou senha incorretos.";
+                $tipo_mensagem = "danger";
+
+            }
+
+
+            mysqli_stmt_close($stmt);
+
+        }
+
+    }
+
+}
+
+?>
+
+
 <?php include "cabecalho.php"; ?>
 
 
@@ -35,8 +201,23 @@
                         </div>
 
 
-                        <form method="POST">
+                        <?php if (!empty($mensagem)) { ?>
 
+                            <div
+                                class="alert alert-<?php echo $tipo_mensagem; ?>"
+                                role="alert">
+
+                                <?php echo htmlspecialchars($mensagem); ?>
+
+                            </div>
+
+                        <?php } ?>
+
+
+                        <form method="POST" action="">
+
+
+                            <!-- EMAIL -->
 
                             <div class="mb-3">
 
@@ -54,10 +235,13 @@
                                     name="email"
                                     class="form-control form-control-lg"
                                     placeholder="Digite seu e-mail"
+                                    value="<?php echo htmlspecialchars($email ?? ''); ?>"
                                     required>
 
                             </div>
 
+
+                            <!-- SENHA -->
 
                             <div class="mb-4">
 
@@ -79,6 +263,8 @@
 
                             </div>
 
+
+                            <!-- BOTÃO -->
 
                             <div class="d-grid">
 

@@ -1,3 +1,22 @@
+<?php
+
+// =====================================================
+// INICIA A SESSÃO
+// =====================================================
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+
+// =====================================================
+// VERIFICA SE O USUÁRIO ESTÁ LOGADO
+// =====================================================
+
+$usuario_logado = isset($_SESSION["ID_USUARIO"]);
+
+?>
+
 <!DOCTYPE html>
 
 <html lang="pt-BR">
@@ -26,8 +45,6 @@
 
     <style>
 
-        /* CORES DO SITE */
-
         :root {
             --azul-principal: #4F8A9A;
             --azul-escuro: #315F6B;
@@ -38,17 +55,11 @@
         }
 
 
-        /* FUNDO GERAL */
-
         body {
             background-color: var(--fundo);
             color: var(--texto);
         }
 
-
-        /* =========================================
-           CABEÇALHO FIXO
-        ========================================== */
 
         header {
             position: sticky;
@@ -63,18 +74,12 @@
         }
 
 
-        /* =========================================
-           ÁREA DA LOGO
-        ========================================== */
-
         .navbar-brand {
             text-decoration: none;
             display: flex;
             align-items: center;
         }
 
-
-        /* LOGO GRANDE */
 
         .logo-limpalar {
             width: 100px;
@@ -84,8 +89,6 @@
         }
 
 
-        /* NOME LIMPALAR */
-
         .nome-site {
             color: var(--azul-escuro);
             font-size: 1.35rem;
@@ -93,36 +96,23 @@
         }
 
 
-        /* SLOGAN */
-
         .slogan {
             color: var(--texto-secundario);
             font-size: 0.85rem;
         }
 
 
-        /* =========================================
-           LINKS DO MENU
-        ========================================== */
-
         .menu-link {
             color: var(--texto) !important;
-
             padding: 10px 16px !important;
-
             border-radius: 8px;
-
             transition: all 0.3s ease;
         }
 
 
-        /* EFEITO AO PASSAR O MOUSE */
-
         .menu-link:hover {
             background-color: var(--azul-claro);
-
             color: var(--azul-principal) !important;
-
             transform: translateY(-2px);
         }
 
@@ -133,22 +123,16 @@
 
         .btn-entrar {
             color: var(--azul-principal);
-
             border: 1px solid var(--azul-principal);
-
             border-radius: 8px;
-
             transition: all 0.3s ease;
         }
 
 
         .btn-entrar:hover {
             background-color: var(--azul-principal);
-
             color: #FFFFFF;
-
             transform: translateY(-2px);
-
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
         }
 
@@ -159,27 +143,60 @@
 
         .btn-cadastrar {
             background-color: var(--azul-principal);
-
             color: #FFFFFF;
-
             border: 1px solid var(--azul-principal);
-
             border-radius: 8px;
-
             transition: all 0.3s ease;
         }
 
 
         .btn-cadastrar:hover {
             background-color: var(--azul-escuro);
-
             border-color: var(--azul-escuro);
-
             color: #FFFFFF;
-
             transform: translateY(-2px);
-
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
+        }
+
+
+        /* =========================================
+           BOTÃO PAINEL
+        ========================================== */
+
+        .btn-painel {
+            background-color: var(--azul-principal);
+            color: #FFFFFF;
+            border: 1px solid var(--azul-principal);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+
+        .btn-painel:hover {
+            background-color: var(--azul-escuro);
+            border-color: var(--azul-escuro);
+            color: #FFFFFF;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
+        }
+
+
+        /* =========================================
+           BOTÃO SAIR
+        ========================================== */
+
+        .btn-sair {
+            color: #6c757d;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+
+        .btn-sair:hover {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            color: #FFFFFF;
         }
 
 
@@ -272,19 +289,14 @@
                 href="index.php">
 
 
-                <!-- LOGO -->
-
                 <img
                     src="img/logo.png"
                     alt="Logo LimpaLar"
                     class="logo-limpalar">
 
 
-                <!-- NOME E SLOGAN -->
-
                 <div
                     class="d-none d-md-block ms-2">
-
 
                     <span
                         class="d-block fw-bold nome-site">
@@ -300,7 +312,6 @@
                         Cuidado que transforma seu lar
 
                     </small>
-
 
                 </div>
 
@@ -391,6 +402,25 @@
                     </li>
 
 
+                    <?php if ($usuario_logado) { ?>
+
+                        <!-- PAINEL -->
+
+                        <li class="nav-item">
+
+                            <a
+                                class="nav-link menu-link fw-semibold"
+                                href="painel.php">
+
+                                Meu painel
+
+                            </a>
+
+                        </li>
+
+                    <?php } ?>
+
+
                 </ul>
 
 
@@ -402,26 +432,65 @@
                     class="d-flex gap-2 area-login">
 
 
-                    <!-- ENTRAR -->
-
-                    <a
-                        href="entrar.php"
-                        class="btn btn-entrar px-4">
-
-                        Entrar
-
-                    </a>
+                    <?php if ($usuario_logado) { ?>
 
 
-                    <!-- CADASTRAR -->
+                        <!-- =================================
+                             PAINEL
+                        ================================== -->
 
-                    <a
-                        href="cadastrar.php"
-                        class="btn btn-cadastrar px-4">
+                        <a
+                            href="painel.php"
+                            class="btn btn-painel px-4">
 
-                        Cadastrar
+                            Meu painel
 
-                    </a>
+                        </a>
+
+
+                        <!-- =================================
+                             SAIR
+                        ================================== -->
+
+                        <a
+                            href="sair.php"
+                            class="btn btn-sair px-4">
+
+                            Sair
+
+                        </a>
+
+
+                    <?php } else { ?>
+
+
+                        <!-- =================================
+                             ENTRAR
+                        ================================== -->
+
+                        <a
+                            href="entrar.php"
+                            class="btn btn-entrar px-4">
+
+                            Entrar
+
+                        </a>
+
+
+                        <!-- =================================
+                             CADASTRAR
+                        ================================== -->
+
+                        <a
+                            href="cadastrar.php"
+                            class="btn btn-cadastrar px-4">
+
+                            Cadastrar
+
+                        </a>
+
+
+                    <?php } ?>
 
 
                 </div>

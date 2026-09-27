@@ -46,12 +46,12 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
     <style>
 
         :root {
-            --azul-principal: #4F8A9A;
-            --azul-escuro: #315F6B;
-            --azul-claro: #EAF3F5;
-            --texto: #26363B;
-            --texto-secundario: #66777C;
-            --fundo: #F7FAFB;
+            --azul-principal: #18A999;
+            --azul-escuro: #164E63;
+            --azul-claro: #E7F6F3;
+            --texto: #243438;
+            --texto-secundario: #617477;
+            --fundo: #F4F9F7;
         }
 
 
@@ -69,7 +69,7 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
 
 
         .navbar {
-            background-color: #FFFFFF !important;
+            background-color: #FBFDFC !important;
             min-height: 90px;
         }
 
@@ -131,7 +131,7 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
 
         .btn-entrar:hover {
             background-color: var(--azul-principal);
-            color: #FFFFFF;
+            color: #FBFDFC;
             transform: translateY(-2px);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
         }
@@ -143,7 +143,7 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
 
         .btn-cadastrar {
             background-color: var(--azul-principal);
-            color: #FFFFFF;
+            color: #FBFDFC;
             border: 1px solid var(--azul-principal);
             border-radius: 8px;
             transition: all 0.3s ease;
@@ -153,7 +153,7 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
         .btn-cadastrar:hover {
             background-color: var(--azul-escuro);
             border-color: var(--azul-escuro);
-            color: #FFFFFF;
+            color: #FBFDFC;
             transform: translateY(-2px);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
         }
@@ -165,7 +165,7 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
 
         .btn-painel {
             background-color: var(--azul-principal);
-            color: #FFFFFF;
+            color: #FBFDFC;
             border: 1px solid var(--azul-principal);
             border-radius: 8px;
             transition: all 0.3s ease;
@@ -175,7 +175,7 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
         .btn-painel:hover {
             background-color: var(--azul-escuro);
             border-color: var(--azul-escuro);
-            color: #FFFFFF;
+            color: #FBFDFC;
             transform: translateY(-2px);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
         }
@@ -186,17 +186,17 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
         ========================================== */
 
         .btn-sair {
-            color: #6c757d;
-            border: 1px solid #ced4da;
+            color: #617477;
+            border: 1px solid #C9D8D5;
             border-radius: 8px;
             transition: all 0.3s ease;
         }
 
 
         .btn-sair:hover {
-            background-color: #6c757d;
-            border-color: #6c757d;
-            color: #FFFFFF;
+            background-color: #617477;
+            border-color: #617477;
+            color: #FBFDFC;
         }
 
 
@@ -205,12 +205,12 @@ $usuario_logado = isset($_SESSION["ID_USUARIO"]);
         ========================================== */
 
         .navbar-toggler {
-            border-color: #D5E3E6;
+            border-color: #C9E2DE;
         }
 
 
         .navbar-toggler:focus {
-            box-shadow: 0 0 0 0.2rem rgba(79, 138, 154, 0.20);
+            box-shadow: 0 0 0 0.2rem rgba(24, 169, 153, 0.22);
         }
 
 

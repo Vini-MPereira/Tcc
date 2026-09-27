@@ -1,876 +1,751 @@
 <?php
 
-include "cabecalho.php";
+session_start();
 
+include "conexao.php";
 
-// =====================================================
-// CONEXÃO COM O BANCO
-// =====================================================
+include "bairros_bauru.php";
 
-$host = "localhost";
-$usuario = "root";
-$senha = "";
-$banco = "plataforma_servicos";
+if (isset($_GET["acao"]) && $_GET["acao"] === "buscar_bairro") {
 
-$conexao = mysqli_connect(
-    $host,
-    $usuario,
-    $senha,
-    $banco
-);
+    header("Content-Type: application/json; charset=UTF-8");
 
-if (!$conexao) {
-    die("Erro ao conectar ao banco: " . mysqli_connect_error());
+    $termo = trim($_GET["termo"] ?? "");
+
+    echo json_encode(
+        procurar_bairros($termo),
+        JSON_UNESCAPED_UNICODE
+    );
+
+    exit;
 }
 
-mysqli_set_charset($conexao, "utf8mb4");
+function escapar($texto)
 
+{
 
-// =====================================================
-// FILTROS
-// =====================================================
+    return htmlspecialchars($texto ?? "", ENT_QUOTES, "UTF-8");
 
-$busca = isset($_GET["busca"])
-    ? trim($_GET["busca"])
-    : "";
+}
 
-$categoria = isset($_GET["categoria"])
-    ? intval($_GET["categoria"])
-    : 0;
+$busca_bairro = trim($_GET["bairro"] ?? "");
 
-$cidade = isset($_GET["cidade"])
-    ? trim($_GET["cidade"])
-    : "";
+$bairro_oficial = resolver_bairro($_GET["bairro_oficial"] ?? "");
 
-
-// =====================================================
-// CATEGORIAS
-// =====================================================
-
-$sqlCategorias = "
-    SELECT
-        ID_CATEGORIA,
-        NOME
-
-    FROM CATEGORIA
-
-    WHERE ATIVO = 1
-
-    ORDER BY NOME
-";
-
-$resultCategorias = mysqli_query(
-    $conexao,
-    $sqlCategorias
-);
-
-
-// =====================================================
-// CONSULTA DOS ANÚNCIOS
-// =====================================================
+$cep_pesquisa = preg_replace("/[^0-9]/", "", $_GET["cep"] ?? "");
 
 $sql = "
 
     SELECT
 
         A.ID_ANUNCIO,
+
+        A.ID_USUARIO,
+
         A.TITULO,
+
         A.DESCRICAO,
+
         A.PRECO,
+
         A.TIPO_PRECO,
+
         A.FOTO,
-        A.ESTADO,
+
+        A.CEP,
+
         A.CIDADE,
+
         A.BAIRRO,
+
         A.STATUS,
+
         A.DATA_CADASTRO,
 
-        U.ID_USUARIO,
-        U.NOME AS NOME_USUARIO,
+        U.NOME,
+
         U.FOTO AS FOTO_USUARIO,
-        U.TELEFONE,
 
-        C.ID_CATEGORIA,
-        C.NOME AS NOME_CATEGORIA,
-
-        COALESCE(
-            AVG(AV.NOTA),
-            0
-        ) AS MEDIA_AVALIACAO,
-
-        COUNT(AV.ID_AVALIACAO)
-            AS TOTAL_AVALIACOES
+        U.TELEFONE
 
     FROM ANUNCIO A
 
+    INNER JOIN USUARIO U ON U.ID_USUARIO = A.ID_USUARIO
 
-    INNER JOIN USUARIO U
+    WHERE A.STATUS = 'ATIVO'
 
-        ON U.ID_USUARIO = A.ID_USUARIO
+      AND U.ATIVO = 1
 
-
-    INNER JOIN CATEGORIA C
-
-        ON C.ID_CATEGORIA = A.ID_CATEGORIA
-
-
-    LEFT JOIN CONTRATACAO CT
-
-        ON CT.ID_ANUNCIO = A.ID_ANUNCIO
-
-
-    LEFT JOIN AVALIACAO AV
-
-        ON AV.ID_CONTRATACAO = CT.ID_CONTRATACAO
-
-
-    WHERE
-
-        A.STATUS = 'ATIVO'
-
-        AND U.ATIVO = 1
-";
-
-
-// =====================================================
-// FILTRO DE BUSCA
-// =====================================================
-
-if ($busca !== "") {
-
-    $buscaSegura = mysqli_real_escape_string(
-        $conexao,
-        $busca
-    );
-
-    $sql .= "
-
-        AND (
-
-            A.TITULO LIKE '%$buscaSegura%'
-
-            OR A.DESCRICAO LIKE '%$buscaSegura%'
-
-            OR U.NOME LIKE '%$buscaSegura%'
-
-            OR C.NOME LIKE '%$buscaSegura%'
-
-        )
-
-    ";
-}
-
-
-// =====================================================
-// FILTRO CATEGORIA
-// =====================================================
-
-if ($categoria > 0) {
-
-    $sql .= "
-
-        AND A.ID_CATEGORIA = $categoria
-
-    ";
-}
-
-
-// =====================================================
-// FILTRO CIDADE
-// =====================================================
-
-if ($cidade !== "") {
-
-    $cidadeSegura = mysqli_real_escape_string(
-        $conexao,
-        $cidade
-    );
-
-    $sql .= "
-
-        AND A.CIDADE LIKE '%$cidadeSegura%'
-
-    ";
-}
-
-
-// =====================================================
-// AGRUPAMENTO
-// =====================================================
-
-$sql .= "
-
-    GROUP BY
-
-        A.ID_ANUNCIO,
-        A.TITULO,
-        A.DESCRICAO,
-        A.PRECO,
-        A.TIPO_PRECO,
-        A.FOTO,
-        A.ESTADO,
-        A.CIDADE,
-        A.BAIRRO,
-        A.STATUS,
-        A.DATA_CADASTRO,
-
-        U.ID_USUARIO,
-        U.NOME,
-        U.FOTO,
-        U.TELEFONE,
-
-        C.ID_CATEGORIA,
-        C.NOME
-
-
-    ORDER BY
-        A.DATA_CADASTRO DESC
+    ORDER BY A.DATA_CADASTRO DESC
 
 ";
 
+$resultado = mysqli_query($conexao, $sql);
 
-// =====================================================
-// EXECUTA CONSULTA
-// =====================================================
+$anuncios = [];
 
-$resultAnuncios = mysqli_query(
-    $conexao,
-    $sql
-);
+if ($resultado) {
 
-if (!$resultAnuncios) {
+    while ($linha = mysqli_fetch_assoc($resultado)) {
 
-    die(
-        "Erro ao consultar anúncios: "
-        . mysqli_error($conexao)
-    );
-
-}
-
-
-// =====================================================
-// FUNÇÃO PREÇO
-// =====================================================
-
-function formatarPreco($preco)
-{
-
-    if (
-        $preco === null ||
-        $preco === ""
-    ) {
-
-        return "A combinar";
-
-    }
-
-    return "R$ "
-        . number_format(
-            $preco,
-            2,
-            ",",
-            "."
-        );
-
-}
-
-
-// =====================================================
-// TIPO DE PREÇO
-// =====================================================
-
-function tipoPreco($tipo)
-{
-
-    switch ($tipo) {
-
-        case "HORA":
-            return "por hora";
-
-        case "DIARIA":
-            return "por diária";
-
-        case "SERVICO":
-            return "por serviço";
-
-        default:
-            return "";
+        $anuncios[] = $linha;
 
     }
 
 }
 
-?>
+$exatos = [];
 
+$outros = [];
 
-<main>
+if ($bairro_oficial !== "") {
 
+    $alvo = normalizar_bairro($bairro_oficial);
 
-    <!-- =========================================
-         TÍTULO
-    ========================================== -->
+    foreach ($anuncios as $anuncio) {
 
-    <section class="container py-5">
+        $encontrou = false;
 
-        <div class="text-center">
+        foreach (explode(",", $anuncio["BAIRRO"] ?? "") as $bairro) {
 
+            $canonico = resolver_bairro(trim($bairro));
 
-            <h1
-                class="fw-bold"
-                style="color: #315F6B;">
+            if ($canonico !== "") {
 
-                Encontre um profissional
+                $valor_comparar = $canonico;
 
-            </h1>
+            } else {
 
+                $valor_comparar = trim($bairro);
 
-            <p
-                class="lead text-secondary">
+            }
 
-                Escolha um profissional para cuidar
-                da sua casa.
+            if (normalizar_bairro($valor_comparar) === $alvo) {
 
-            </p>
+                $encontrou = true;
 
+                break;
+
+            }
+
+        }
+
+        if ($encontrou) {
+
+            $exatos[] = $anuncio;
+
+        } else {
+
+            $outros[] = $anuncio;
+
+        }
+
+    }
+
+} else {
+
+    $outros = $anuncios;
+
+}
+
+function mostrar_card($anuncio)
+
+{
+
+    $foto = trim($anuncio["FOTO"] ?? "");
+
+    $descricao = $anuncio["DESCRICAO"] ?? "";
+
+    $bairros = array_filter(array_map("trim", explode(",", $anuncio["BAIRRO"] ?? "")));
+
+    ?>
+
+    <div class="col-md-6 col-lg-4">
+
+        <div class="card-profissional">
+
+            <?php if ($foto !== "" && file_exists($foto)): ?>
+
+                <img src="<?= escapar($foto); ?>" class="foto-profissional" alt="Foto do profissional">
+
+            <?php else: ?>
+
+                <div class="sem-foto">🧹</div>
+
+            <?php endif; ?>
+
+            <div class="p-4">
+
+                <h5 class="nome-profissional mb-2">
+
+                    <?= escapar($anuncio["NOME"]); ?>
+
+                </h5>
+
+                <span class="badge text-bg-light">🧹 Faxina</span>
+
+                <p class="descricao-profissional mt-3">
+
+                    <?= nl2br(escapar($descricao)); ?>
+
+                </p>
+
+                <div class="mb-3">
+
+                    <?php foreach ($bairros as $bairro): ?>
+
+                        <span class="bairro-tag">
+
+                            📍 <?= escapar(nome_exibicao_bairro($bairro)); ?>
+
+                        </span>
+
+                    <?php endforeach; ?>
+
+                </div>
+
+                <?php if ($anuncio["PRECO"] !== null && $anuncio["PRECO"] !== ""): ?>
+
+                    <div class="preco mb-3">
+
+                        A partir de R$ <?= number_format((float)$anuncio["PRECO"], 2, ",", "."); ?>
+
+                    </div>
+
+                <?php endif; ?>
+
+                <a href="entrar.php" class="btn btn-primary w-100">
+
+                    👤 Ver profissional
+
+                </a>
+
+            </div>
 
         </div>
 
-    </section>
+    </div>
 
+    <?php
 
+}
 
-    <!-- =========================================
-         FILTROS
-    ========================================== -->
+?>
 
-    <section class="container pb-4">
+<?php include "cabecalho.php"; ?>
 
-        <form
-            method="GET"
-            class="card border-0 shadow-sm rounded-4 p-3">
+<style>
 
+.titulo-pagina{color:#126E68;font-weight:700}
+
+.subtitulo-pagina{color:#617477}
+
+.filtro-box{background:#E7F5F1;border-radius:18px;padding:25px;border:1px solid #D5E5E1;margin-bottom:30px}
+
+.campo-label{font-weight:600;color:#126E68}
+
+.campo-bairro{position:relative}
+
+.campo-bairro input{border-radius:10px;padding:13px}
+
+.sugestoes-bairro{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #D5E5E1;border-radius:10px;margin-top:5px;z-index:1000;max-height:300px;overflow-y:auto;display:none;box-shadow:0 5px 20px rgba(0,0,0,.12)}
+
+.item-sugestao{width:100%;background:#fff;border:0;text-align:left;padding:12px 15px;cursor:pointer}
+
+.item-sugestao:hover{background:#E7F5F1}
+
+.nome-curto{color:#126E68;font-weight:700}
+
+.nome-oficial{color:#617477;font-size:13px}
+
+.aviso-resultados{background:#fff;border-left:5px solid #18A999;padding:15px 18px;border-radius:10px;margin-bottom:25px}
+
+.aviso-sem-resultado{background:#fff8e8;border-left:5px solid #F2B84B;padding:18px;border-radius:10px;margin-bottom:25px}
+
+.card-profissional{border:0;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 5px 20px rgba(0,0,0,.07);height:100%}
+
+.foto-profissional,.sem-foto{width:100%;height:190px}
+
+.foto-profissional{object-fit:cover}
+
+.sem-foto{background:#E7F5F1;display:flex;justify-content:center;align-items:center;font-size:60px}
+
+.nome-profissional{color:#126E68;font-weight:700}
+
+.descricao-profissional{color:#617477;min-height:55px}
+
+.bairro-tag{display:inline-block;background:#E7F5F1;color:#126E68;border-radius:20px;padding:5px 10px;margin:3px;font-size:13px}
+
+.preco{color:#126E68;font-weight:700;font-size:18px}
+
+</style>
+
+<div class="container py-5">
+
+    <div class="text-center mb-4">
+
+        <h1 class="titulo-pagina">🧹 Encontre um profissional</h1>
+
+        <p class="subtitulo-pagina">
+
+            Digite o bairro do jeito que você costuma falar.
+
+        </p>
+
+    </div>
+
+    <div class="filtro-box">
+
+        <h4 class="mb-4">📍 Onde você precisa da faxina?</h4>
+
+        <form method="GET" action="profissionais.php" id="formPesquisa">
 
             <div class="row g-3">
 
+                <div class="col-lg-8">
 
-                <!-- BUSCA -->
+                    <label class="campo-label mb-2">🏘️ Digite seu bairro</label>
 
-                <div class="col-12 col-lg-5">
+                    <div class="campo-bairro">
 
-                    <label
-                        class="form-label fw-semibold">
+                        <input
 
-                        O que você procura?
+                            type="text"
 
-                    </label>
+                            class="form-control"
 
-                    <input
-                        type="text"
-                        name="busca"
-                        class="form-control"
-                        placeholder="Ex.: limpeza residencial"
-                        value="<?= htmlspecialchars($busca) ?>">
+                            id="campoBairro"
 
-                </div>
+                            name="bairro"
 
+                            value="<?= escapar($busca_bairro); ?>"
 
-                <!-- CATEGORIA -->
+                            placeholder="Ex.: Geisel, Mary Dota, Pagani..."
 
-                <div class="col-12 col-sm-6 col-lg-3">
+                            autocomplete="off"
 
-                    <label
-                        class="form-label fw-semibold">
+                        >
 
-                        Categoria
+                        <input
 
-                    </label>
+                            type="hidden"
 
-                    <select
-                        name="categoria"
-                        class="form-select">
+                            name="bairro_oficial"
 
+                            id="bairroOficial"
 
-                        <option value="0">
+                            value="<?= escapar($bairro_oficial); ?>"
 
-                            Todas as categorias
+                        >
 
-                        </option>
+                        <div class="sugestoes-bairro" id="sugestoesBairro"></div>
 
+                    </div>
 
-                        <?php
+                    <small class="text-muted">
 
-                        while (
-                            $cat =
-                            mysqli_fetch_assoc(
-                                $resultCategorias
-                            )
-                        ) {
+                        Você pode escrever o nome popular. O LimpaLar usa o nome oficial para procurar.
 
-                        ?>
-
-                            <option
-                                value="<?= $cat["ID_CATEGORIA"] ?>"
-                                <?= (
-                                    $categoria ==
-                                    $cat["ID_CATEGORIA"]
-                                )
-                                    ? "selected"
-                                    : ""
-                                ?>>
-
-                                <?= htmlspecialchars(
-                                    $cat["NOME"]
-                                ) ?>
-
-                            </option>
-
-                        <?php } ?>
-
-
-                    </select>
+                    </small>
 
                 </div>
 
+                <div class="col-lg-4">
 
-                <!-- CIDADE -->
+                    <label class="campo-label mb-2">📮 Ou procure pelo CEP</label>
 
-                <div class="col-12 col-sm-6 col-lg-2">
+                    <div class="input-group">
 
-                    <label
-                        class="form-label fw-semibold">
+                        <input
 
-                        Cidade
+                            type="text"
 
-                    </label>
+                            id="cepPesquisa"
 
-                    <input
-                        type="text"
-                        name="cidade"
-                        class="form-control"
-                        placeholder="Sua cidade"
-                        value="<?= htmlspecialchars($cidade) ?>">
+                            class="form-control"
 
-                </div>
+                            maxlength="9"
 
+                            placeholder="00000-000"
 
-                <!-- BOTÃO -->
+                            value="<?= escapar($cep_pesquisa); ?>"
 
-                <div
-                    class="col-12 col-lg-2 d-flex align-items-end">
+                        >
 
-                    <button
-                        type="submit"
-                        class="btn w-100 text-white"
-                        style="background-color: #3F7C8C;">
+                        <button type="button" class="btn btn-primary" id="btnCep">Buscar</button>
 
-                        Buscar
+                    </div>
 
-                    </button>
+                    <small id="statusCep" class="text-muted">
+
+                        O CEP encontra o bairro automaticamente.
+
+                    </small>
 
                 </div>
-
 
             </div>
 
+            <div class="mt-4">
+
+                <button type="submit" class="btn btn-primary">
+
+                    🔎 Procurar profissionais
+
+                </button>
+
+                <a href="profissionais.php" class="btn btn-outline-secondary">
+
+                    Limpar
+
+                </a>
+
+            </div>
 
         </form>
 
-    </section>
+    </div>
 
+    <?php if ($bairro_oficial !== ""): ?>
 
+        <?php if (count($exatos) > 0): ?>
 
-    <!-- =========================================
-         CARDS
-    ========================================== -->
+            <div class="aviso-resultados">
 
-    <section class="container pb-5">
+                <strong>
 
+                    📍 Profissionais que atendem <?= escapar($busca_bairro); ?>
 
-        <?php if (
-            mysqli_num_rows($resultAnuncios) > 0
-        ) { ?>
+                </strong>
 
+                <div class="mt-1">
 
-            <div
-                class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
-
-
-                <?php
-
-                while (
-                    $anuncio =
-                    mysqli_fetch_assoc(
-                        $resultAnuncios
-                    )
-                ) {
-
-                ?>
-
-
-                    <!-- =================================
-                         CARD
-                    ================================== -->
-
-                    <div class="col">
-
-                        <div
-                            class="card border-0 shadow-sm rounded-4 overflow-hidden h-100">
-
-
-                            <!-- FOTO DO ANÚNCIO -->
-
-                            <?php if (
-                                !empty(
-                                    $anuncio["FOTO"]
-                                )
-                            ) { ?>
-
-                                <img
-                                    src="<?= htmlspecialchars(
-                                        $anuncio["FOTO"]
-                                    ) ?>"
-                                    class="card-img-top"
-                                    style="
-                                        height: 230px;
-                                        object-fit: cover;
-                                    "
-                                    alt="<?= htmlspecialchars(
-                                        $anuncio["TITULO"]
-                                    ) ?>">
-
-                            <?php } else { ?>
-
-                                <img
-                                    src="img/inicio.jfif"
-                                    class="card-img-top"
-                                    style="
-                                        height: 230px;
-                                        object-fit: cover;
-                                    "
-                                    alt="Serviço LimpaLar">
-
-                            <?php } ?>
-
-
-                            <!-- CONTEÚDO -->
-
-                            <div
-                                class="card-body d-flex flex-column">
-
-
-                                <!-- CATEGORIA -->
-
-                                <span
-                                    class="badge rounded-pill align-self-start mb-2"
-                                    style="
-                                        background-color: #EAF3F5;
-                                        color: #315F6B;
-                                    ">
-
-                                    <?= htmlspecialchars(
-                                        $anuncio[
-                                            "NOME_CATEGORIA"
-                                        ]
-                                    ) ?>
-
-                                </span>
-
-
-                                <!-- TÍTULO -->
-
-                                <h5
-                                    class="fw-bold mb-2">
-
-                                    <?= htmlspecialchars(
-                                        $anuncio["TITULO"]
-                                    ) ?>
-
-                                </h5>
-
-
-                                <!-- PROFISSIONAL -->
-
-                                <p
-                                    class="mb-2 text-secondary">
-
-                                    <strong>
-                                        Profissional:
-                                    </strong>
-
-                                    <?= htmlspecialchars(
-                                        $anuncio[
-                                            "NOME_USUARIO"
-                                        ]
-                                    ) ?>
-
-                                </p>
-
-
-                                <!-- DESCRIÇÃO -->
-
-                                <p
-                                    class="text-secondary mb-3"
-                                    style="
-                                        display: -webkit-box;
-                                        -webkit-line-clamp: 3;
-                                        -webkit-box-orient: vertical;
-                                        overflow: hidden;
-                                    ">
-
-                                    <?= htmlspecialchars(
-                                        $anuncio[
-                                            "DESCRICAO"
-                                        ]
-                                    ) ?>
-
-                                </p>
-
-
-                                <!-- PREÇO -->
-
-                                <div
-                                    class="mb-2">
-
-
-                                    <span
-                                        class="fw-bold fs-5"
-                                        style="
-                                            color: #315F6B;
-                                        ">
-
-                                        <?= formatarPreco(
-                                            $anuncio[
-                                                "PRECO"
-                                            ]
-                                        ) ?>
-
-                                    </span>
-
-
-                                    <?php if (
-                                        !empty(
-                                            $anuncio[
-                                                "PRECO"
-                                            ]
-                                        )
-                                    ) { ?>
-
-                                        <small
-                                            class="text-secondary">
-
-                                            <?= tipoPreco(
-                                                $anuncio[
-                                                    "TIPO_PRECO"
-                                                ]
-                                            ) ?>
-
-                                        </small>
-
-                                    <?php } ?>
-
-
-                                </div>
-
-
-                                <!-- AVALIAÇÃO -->
-
-                                <div
-                                    class="mb-2">
-
-
-                                    <?php
-
-                                    $media =
-                                        (float)
-                                        $anuncio[
-                                            "MEDIA_AVALIACAO"
-                                        ];
-
-                                    ?>
-
-
-                                    <?php if (
-                                        $media > 0
-                                    ) { ?>
-
-                                        <span
-                                            class="text-warning fw-bold">
-
-                                            ★
-                                            <?= number_format(
-                                                $media,
-                                                1,
-                                                ",",
-                                                "."
-                                            ) ?>
-
-                                        </span>
-
-
-                                        <small
-                                            class="text-secondary">
-
-                                            (
-                                            <?= $anuncio[
-                                                "TOTAL_AVALIACOES"
-                                            ] ?>
-                                            avaliações)
-
-                                        </small>
-
-                                    <?php } else { ?>
-
-                                        <small
-                                            class="text-secondary">
-
-                                            Ainda sem avaliações
-
-                                        </small>
-
-                                    <?php } ?>
-
-
-                                </div>
-
-
-                                <!-- LOCALIZAÇÃO -->
-
-                                <?php if (
-                                    !empty(
-                                        $anuncio["CIDADE"]
-                                    )
-                                ) { ?>
-
-                                    <p
-                                        class="text-secondary mb-3">
-
-                                        📍
-
-                                        <?= htmlspecialchars(
-                                            $anuncio[
-                                                "CIDADE"
-                                            ]
-                                        ) ?>
-
-                                        <?php if (
-                                            !empty(
-                                                $anuncio[
-                                                    "ESTADO"
-                                                ]
-                                            )
-                                        ) { ?>
-
-                                            -
-
-                                            <?= htmlspecialchars(
-                                                $anuncio[
-                                                    "ESTADO"
-                                                ]
-                                            ) ?>
-
-                                        <?php } ?>
-
-                                    </p>
-
-                                <?php } ?>
-
-
-                                <!-- BOTÃO -->
-
-                                <a
-                                    href="detalhes_anuncio.php?id=<?= $anuncio["ID_ANUNCIO"] ?>"
-                                    class="btn mt-auto text-white"
-                                    style="
-                                        background-color: #3F7C8C;
-                                    ">
-
-                                    Ver anúncio
-
-                                </a>
-
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-                <?php } ?>
-
-
-            </div>
-
-
-        <?php } else { ?>
-
-
-            <!-- =====================================
-                 SEM RESULTADOS
-            ====================================== -->
-
-            <div
-                class="card border-0 shadow-sm rounded-4">
-
-                <div
-                    class="card-body text-center py-5">
-
-
-                    <div
-                        class="display-5 mb-3">
-
-                        🔎
-
-                    </div>
-
-
-                    <h4
-                        class="fw-bold"
-                        style="color: #315F6B;">
-
-                        Nenhum profissional encontrado
-
-                    </h4>
-
-
-                    <p class="text-secondary">
-
-                        Tente alterar os filtros
-                        ou realizar uma nova busca.
-
-                    </p>
-
-
-                    <a
-                        href="profissionais.php"
-                        class="btn text-white"
-                        style="
-                            background-color: #3F7C8C;
-                        ">
-
-                        Limpar filtros
-
-                    </a>
-
+                    Encontramos <?= count($exatos); ?> profissional(is).
 
                 </div>
 
             </div>
 
+            <div class="row g-4">
 
-        <?php } ?>
+                <?php foreach ($exatos as $anuncio) { mostrar_card($anuncio); } ?>
 
+            </div>
 
-    </section>
+        <?php else: ?>
 
+            <div class="aviso-sem-resultado">
 
-</main>
+                <h5>😕 Nenhum profissional encontrado nesse bairro.</h5>
 
+                <p class="mb-0">
 
-<?php
+                    Não encontramos alguém atendendo exatamente
 
-mysqli_close($conexao);
+                    <strong><?= escapar($busca_bairro); ?></strong>.
 
-include "rodape.php";
+                    <br>
 
-?>
+                    Abaixo estão outros profissionais cadastrados no LimpaLar.
+
+                </p>
+
+            </div>
+
+            <?php if (count($outros) > 0): ?>
+
+                <div class="row g-4">
+
+                    <?php foreach ($outros as $anuncio) { mostrar_card($anuncio); } ?>
+
+                </div>
+
+            <?php endif; ?>
+
+        <?php endif; ?>
+
+    <?php else: ?>
+
+        <h3 class="titulo-pagina mb-4">👇 Profissionais disponíveis</h3>
+
+        <?php if (count($anuncios) > 0): ?>
+
+            <div class="row g-4">
+
+                <?php foreach ($anuncios as $anuncio) { mostrar_card($anuncio); } ?>
+
+            </div>
+
+        <?php else: ?>
+
+            <div class="alert alert-light border">
+
+                Ainda não existem serviços de faxina publicados.
+
+            </div>
+
+        <?php endif; ?>
+
+    <?php endif; ?>
+
+</div>
+
+<script>
+
+const campoBairro = document.getElementById("campoBairro");
+
+const bairroOficial = document.getElementById("bairroOficial");
+
+const sugestoes = document.getElementById("sugestoesBairro");
+
+const formPesquisa = document.getElementById("formPesquisa");
+
+let timerBairro = null;
+
+function carregarSugestoes() {
+
+    const texto = campoBairro.value.trim();
+
+    bairroOficial.value = "";
+
+    clearTimeout(timerBairro);
+
+    if (texto.length < 2) {
+
+        sugestoes.innerHTML = "";
+
+        sugestoes.style.display = "none";
+
+        return;
+
+    }
+
+    timerBairro = setTimeout(async () => {
+
+        try {
+
+            const resposta = await fetch(
+
+                "profissionais.php?acao=buscar_bairro&termo=" +
+
+                encodeURIComponent(texto)
+
+            );
+
+            const dados = await resposta.json();
+
+            sugestoes.innerHTML = "";
+
+            if (!dados.length) {
+
+                sugestoes.innerHTML =
+
+                    '<div class="p-3 text-muted">Nenhum bairro encontrado.</div>';
+
+                sugestoes.style.display = "block";
+
+                return;
+
+            }
+
+            dados.forEach((bairro) => {
+
+                const botao = document.createElement("button");
+
+                botao.type = "button";
+
+                botao.className = "item-sugestao";
+
+                botao.innerHTML =
+
+                    '<div class="nome-curto">📍 ' +
+
+                    escapeHtml(bairro.nome) +
+
+                    '</div>' +
+
+                    '<div class="nome-oficial">' +
+
+                    escapeHtml(bairro.oficial) +
+
+                    '</div>';
+
+                botao.addEventListener("click", () => {
+
+                    campoBairro.value = bairro.nome;
+
+                    bairroOficial.value = bairro.oficial;
+
+                    sugestoes.innerHTML = "";
+
+                    sugestoes.style.display = "none";
+
+                });
+
+                sugestoes.appendChild(botao);
+
+            });
+
+            sugestoes.style.display = "block";
+
+        } catch (erro) {
+
+            sugestoes.style.display = "none";
+
+        }
+
+    }, 180);
+
+}
+
+function escapeHtml(texto) {
+
+    const div = document.createElement("div");
+
+    div.textContent = texto;
+
+    return div.innerHTML;
+
+}
+
+campoBairro.addEventListener("input", carregarSugestoes);
+
+document.addEventListener("click", (evento) => {
+
+    if (!evento.target.closest(".campo-bairro")) {
+
+        sugestoes.style.display = "none";
+
+    }
+
+});
+
+formPesquisa.addEventListener("submit", (evento) => {
+
+    if (campoBairro.value.trim() !== "" && bairroOficial.value.trim() === "") {
+
+        evento.preventDefault();
+
+        alert("Escolha um bairro na sugestão para confirmar o nome oficial.");
+
+        campoBairro.focus();
+
+    }
+
+});
+
+const cepPesquisa = document.getElementById("cepPesquisa");
+
+const btnCep = document.getElementById("btnCep");
+
+const statusCep = document.getElementById("statusCep");
+
+cepPesquisa.addEventListener("input", () => {
+
+    let valor = cepPesquisa.value.replace(/\D/g, "").slice(0, 8);
+
+    if (valor.length > 5) {
+
+        valor = valor.substring(0, 5) + "-" + valor.substring(5);
+
+    }
+
+    cepPesquisa.value = valor;
+
+});
+
+btnCep.addEventListener("click", async () => {
+
+    const cep = cepPesquisa.value.replace(/\D/g, "");
+
+    if (cep.length !== 8) {
+
+        statusCep.textContent = "Digite um CEP válido com 8 números.";
+
+        return;
+
+    }
+
+    statusCep.textContent = "Consultando CEP...";
+
+    try {
+
+        const resposta = await fetch(
+
+            "https://viacep.com.br/ws/" + cep + "/json/"
+
+        );
+
+        const dados = await resposta.json();
+
+        if (dados.erro) {
+
+            statusCep.textContent = "CEP não encontrado.";
+
+            return;
+
+        }
+
+        if (
+
+            (dados.localidade || "").toLowerCase() !== "bauru" ||
+
+            (dados.uf || "").toUpperCase() !== "SP"
+
+        ) {
+
+            statusCep.textContent = "Esse CEP não é de Bauru/SP.";
+
+            return;
+
+        }
+
+        campoBairro.value = dados.bairro || "";
+
+        bairroOficial.value = "";
+
+        if (dados.bairro) {
+
+            const respostaBairro = await fetch(
+
+                "profissionais.php?acao=buscar_bairro&termo=" +
+
+                encodeURIComponent(dados.bairro)
+
+            );
+
+            const bairros = await respostaBairro.json();
+
+            if (bairros.length > 0) {
+
+                bairroOficial.value = bairros[0].oficial;
+
+                campoBairro.value = bairros[0].nome;
+
+                statusCep.textContent =
+
+                    "Bairro encontrado: " + bairros[0].oficial;
+
+            } else {
+
+                statusCep.textContent =
+
+                    "O CEP encontrou '" + dados.bairro +
+
+                    "', mas esse bairro não foi localizado na lista.";
+
+            }
+
+        }
+
+    } catch (erro) {
+
+        statusCep.textContent = "Não foi possível consultar o CEP agora.";
+
+    }
+
+});
+
+</script>
+
+<?php include "rodape.php"; ?>

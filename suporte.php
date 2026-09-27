@@ -1,44 +1,41 @@
 <?php include "cabecalho.php"; ?>
 
 
+
 <main>
+
 
 
     <!-- =========================================
          TÍTULO
     ========================================== -->
-
     <section class="container py-5">
 
         <div class="text-center mb-5">
 
             <h1
                 class="fw-bold"
-                style="color: #315F6B;">
-
+                style="color: #126E68;">
                 Como podemos ajudar?
-
             </h1>
 
             <p class="lead text-secondary">
-
                 Encontre respostas para suas dúvidas
                 sobre o LimpaLar.
-
             </p>
 
         </div>
 
 
+
         <!-- =========================================
              CARDS DE SUPORTE
         ========================================== -->
-
         <div class="row g-4 justify-content-center">
 
 
-            <!-- DÚVIDAS -->
 
+            <!-- DÚVIDAS -->
             <div class="col-12 col-md-6 col-lg-4">
 
                 <div
@@ -48,31 +45,23 @@
 
                         <div
                             class="display-5 mb-3"
-                            style="color: #3F7C8C;">
-
+                            style="color: #18A999;">
                             ?
-
                         </div>
 
                         <h4 class="fw-bold">
-
                             Dúvidas frequentes
-
                         </h4>
 
                         <p class="text-secondary">
-
                             Encontre respostas para as
                             principais dúvidas.
-
                         </p>
 
                         <a
                             href="#duvidas"
                             class="btn btn-outline-primary">
-
                             Ver dúvidas
-
                         </a>
 
                     </div>
@@ -82,8 +71,8 @@
             </div>
 
 
-            <!-- AGENDAMENTO -->
 
+            <!-- AGENDAMENTO -->
             <div class="col-12 col-md-6 col-lg-4">
 
                 <div
@@ -93,31 +82,23 @@
 
                         <div
                             class="display-5 mb-3"
-                            style="color: #3F7C8C;">
-
+                            style="color: #18A999;">
                             📅
-
                         </div>
 
                         <h4 class="fw-bold">
-
                             Agendamento
-
                         </h4>
 
                         <p class="text-secondary">
-
                             Veja informações sobre
                             seus agendamentos.
-
                         </p>
 
                         <a
                             href="#agendamento"
                             class="btn btn-outline-primary">
-
                             Ver informações
-
                         </a>
 
                     </div>
@@ -127,8 +108,8 @@
             </div>
 
 
-            <!-- CONTATO -->
 
+            <!-- CONTATO -->
             <div class="col-12 col-md-6 col-lg-4">
 
                 <div
@@ -138,31 +119,23 @@
 
                         <div
                             class="display-5 mb-3"
-                            style="color: #3F7C8C;">
-
+                            style="color: #18A999;">
                             💬
-
                         </div>
 
                         <h4 class="fw-bold">
-
                             Fale conosco
-
                         </h4>
 
                         <p class="text-secondary">
-
                             Entre em contato com a
                             equipe do LimpaLar.
-
                         </p>
 
                         <a
                             href="#contato"
                             class="btn btn-outline-primary">
-
                             Entrar em contato
-
                         </a>
 
                     </div>
@@ -170,6 +143,7 @@
                 </div>
 
             </div>
+
 
 
         </div>
@@ -178,14 +152,15 @@
 
 
 
+
+
     <!-- =========================================
          DÚVIDAS FREQUENTES
     ========================================== -->
-
     <section
         id="duvidas"
         class="py-5"
-        style="background-color: #EAF3F5;">
+        style="background-color: #E7F5F1;">
 
         <div class="container">
 
@@ -193,13 +168,12 @@
 
                 <h2
                     class="fw-bold"
-                    style="color: #315F6B;">
-
+                    style="color: #126E68;">
                     Dúvidas frequentes
-
                 </h2>
 
             </div>
+
 
 
             <div
@@ -207,8 +181,8 @@
                 id="accordionSuporte">
 
 
-                <!-- PERGUNTA 1 -->
 
+                <!-- PERGUNTA 1 -->
                 <div class="accordion-item">
 
                     <h2 class="accordion-header">
@@ -243,8 +217,8 @@
                 </div>
 
 
-                <!-- PERGUNTA 2 -->
 
+                <!-- PERGUNTA 2 -->
                 <div class="accordion-item">
 
                     <h2 class="accordion-header">
@@ -280,8 +254,8 @@
                 </div>
 
 
-                <!-- PERGUNTA 3 -->
 
+                <!-- PERGUNTA 3 -->
                 <div class="accordion-item">
 
                     <h2 class="accordion-header">
@@ -316,8 +290,8 @@
                 </div>
 
 
-                <!-- PERGUNTA 4 -->
 
+                <!-- PERGUNTA 4 -->
                 <div class="accordion-item">
 
                     <h2 class="accordion-header">
@@ -352,6 +326,7 @@
                 </div>
 
 
+
             </div>
 
         </div>
@@ -360,10 +335,11 @@
 
 
 
+
+
     <!-- =========================================
          AGENDAMENTO
     ========================================== -->
-
     <section
         id="agendamento"
         class="container py-5">
@@ -380,7 +356,7 @@
 
                         <h2
                             class="fw-bold"
-                            style="color: #315F6B;">
+                            style="color: #126E68;">
 
                             Problemas com seu agendamento?
 
@@ -396,7 +372,7 @@
                         <a
                             href="#contato"
                             class="btn btn-lg text-white"
-                            style="background-color: #3F7C8C;">
+                            style="background-color: #18A999;">
 
                             Preciso de ajuda
 
@@ -414,14 +390,15 @@
 
 
 
+
+
     <!-- =========================================
          CONTATO
     ========================================== -->
-
     <section
         id="contato"
         class="py-5"
-        style="background-color: #EAF3F5;">
+        style="background-color: #E7F5F1;">
 
         <div class="container">
 
@@ -430,11 +407,12 @@
                 <div class="col-12 col-lg-8">
 
 
+
                     <div class="text-center mb-4">
 
                         <h2
                             class="fw-bold"
-                            style="color: #315F6B;">
+                            style="color: #126E68;">
 
                             Entre em contato
 
@@ -449,7 +427,9 @@
                     </div>
 
 
+
                     <form>
+
 
 
                         <div class="mb-3">
@@ -471,6 +451,7 @@
                         </div>
 
 
+
                         <div class="mb-3">
 
                             <label
@@ -490,6 +471,7 @@
                         </div>
 
 
+
                         <div class="mb-4">
 
                             <label
@@ -505,9 +487,11 @@
                                 class="form-control"
                                 rows="5"
                                 placeholder="Digite sua mensagem">
+
                             </textarea>
 
                         </div>
+
 
 
                         <div class="text-center">
@@ -515,7 +499,7 @@
                             <button
                                 type="submit"
                                 class="btn btn-lg text-white px-5"
-                                style="background-color: #3F7C8C;">
+                                style="background-color: #18A999;">
 
                                 Enviar mensagem
 
@@ -524,7 +508,9 @@
                         </div>
 
 
+
                     </form>
+
 
 
                 </div>
@@ -536,7 +522,9 @@
     </section>
 
 
+
 </main>
+
 
 
 <?php include "rodape.php"; ?>

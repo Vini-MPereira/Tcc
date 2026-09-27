@@ -16,25 +16,27 @@
 
                 <h1
                     class="display-4 fw-bold mb-3"
-                    style="color: #315F6B;">
+                    style="color: #126E68;">
 
                     Bem-vindo ao LimpaLar
 
                 </h1>
 
 
+
                 <h2
                     class="h4 fw-bold mb-3"
-                    style="color: #34464B;">
+                    style="color: #243438;">
 
                     Encontre profissionais de limpeza para sua residência
 
                 </h2>
 
 
+
                 <p
                     class="lead fw-medium"
-                    style="color: #394B50;">
+                    style="color: #36494D;">
 
                     O LimpaLar foi criado para facilitar a busca por
                     profissionais de limpeza, permitindo que clientes
@@ -44,9 +46,10 @@
                 </p>
 
 
+
                 <p
                     class="fw-medium"
-                    style="color: #4B5D62;">
+                    style="color: #617477;">
 
                     Nosso objetivo é tornar esse processo mais simples,
                     rápido e seguro, aproximando clientes e profissionais
@@ -55,14 +58,15 @@
                 </p>
 
 
+
                 <!-- BOTÃO -->
 
                 <a
                     href="profissionais.php"
                     class="btn btn-lg mt-3 px-4 py-3"
                     style="
-                        background-color: #4F8A9A;
-                        border-color: #4F8A9A;
+                        background-color: #18A999;
+                        border-color: #18A999;
                         color: white;
                         border-radius: 10px;
                     ">
@@ -72,6 +76,7 @@
                 </a>
 
             </div>
+
 
 
             <!-- IMAGEM PRINCIPAL -->
@@ -96,13 +101,14 @@
     </section>
 
 
+
     <!-- =========================================
          COMO FUNCIONA
     ========================================== -->
 
     <section
         class="py-5"
-        style="background-color: #EAF3F5;">
+        style="background-color: #E7F5F1;">
 
         <div class="container">
 
@@ -115,16 +121,17 @@
 
                     <h2
                         class="fw-bold"
-                        style="color: #315F6B;">
+                        style="color: #126E68;">
 
                         Como funciona o LimpaLar?
 
                     </h2>
 
 
+
                     <p
                         class="lead fw-medium"
-                        style="color: #405258;">
+                        style="color: #4A6063;">
 
                         Encontre um profissional de forma simples.
 
@@ -135,9 +142,11 @@
             </div>
 
 
+
             <!-- ETAPAS -->
 
             <div class="row g-4">
+
 
 
                 <!-- ETAPA 1 -->
@@ -151,25 +160,27 @@
 
                             <div
                                 class="display-5 fw-bold mb-3"
-                                style="color: #4F8A9A;">
+                                style="color: #18A999;">
 
                                 1
 
                             </div>
 
 
+
                             <h5
                                 class="card-title fw-bold"
-                                style="color: #34464B;">
+                                style="color: #243438;">
 
                                 Encontre um profissional
 
                             </h5>
 
 
+
                             <p
                                 class="card-text fw-medium"
-                                style="color: #4B5D62;">
+                                style="color: #617477;">
 
                                 Consulte os profissionais disponíveis
                                 e encontre aquele que melhor atende
@@ -184,6 +195,7 @@
                 </div>
 
 
+
                 <!-- ETAPA 2 -->
 
                 <div class="col-12 col-md-4">
@@ -195,25 +207,27 @@
 
                             <div
                                 class="display-5 fw-bold mb-3"
-                                style="color: #4F8A9A;">
+                                style="color: #18A999;">
 
                                 2
 
                             </div>
 
 
+
                             <h5
                                 class="card-title fw-bold"
-                                style="color: #34464B;">
+                                style="color: #243438;">
 
                                 Conheça o perfil
 
                             </h5>
 
 
+
                             <p
                                 class="card-text fw-medium"
-                                style="color: #4B5D62;">
+                                style="color: #617477;">
 
                                 Veja as informações, experiências e
                                 avaliações disponíveis sobre o profissional.
@@ -227,6 +241,7 @@
                 </div>
 
 
+
                 <!-- ETAPA 3 -->
 
                 <div class="col-12 col-md-4">
@@ -238,25 +253,27 @@
 
                             <div
                                 class="display-5 fw-bold mb-3"
-                                style="color: #4F8A9A;">
+                                style="color: #18A999;">
 
                                 3
 
                             </div>
 
 
+
                             <h5
                                 class="card-title fw-bold"
-                                style="color: #34464B;">
+                                style="color: #243438;">
 
                                 Entre em contato
 
                             </h5>
 
 
+
                             <p
                                 class="card-text fw-medium"
-                                style="color: #4B5D62;">
+                                style="color: #617477;">
 
                                 Depois de escolher o profissional,
                                 entre em contato para combinar os
@@ -271,11 +288,13 @@
                 </div>
 
 
+
             </div>
 
         </div>
 
     </section>
+
 
 
     <!-- =========================================
@@ -291,16 +310,17 @@
 
                 <h2
                     class="fw-bold"
-                    style="color: #315F6B;">
+                    style="color: #126E68;">
 
                     Limpeza e cuidado para sua casa
 
                 </h2>
 
 
+
                 <p
                     class="fw-medium"
-                    style="color: #4B5D62;">
+                    style="color: #617477;">
 
                     Confira alguns exemplos de serviços realizados
                     pelos profissionais.
@@ -312,9 +332,11 @@
         </div>
 
 
+
         <!-- GALERIA -->
 
         <div class="row g-4">
+
 
 
             <!-- FOTO 1 -->
@@ -330,20 +352,22 @@
                         alt="Imagem ilustrativa de limpeza residencial">
 
 
+
                     <div class="card-body text-center">
 
                         <h5
                             class="card-title fw-bold"
-                            style="color: #34464B;">
+                            style="color: #243438;">
 
                             Limpeza residencial
 
                         </h5>
 
 
+
                         <p
                             class="card-text fw-medium"
-                            style="color: #4B5D62;">
+                            style="color: #617477;">
 
                             Coloque aqui uma descrição.
 
@@ -354,6 +378,7 @@
                 </div>
 
             </div>
+
 
 
             <!-- FOTO 2 -->
@@ -369,20 +394,22 @@
                         alt="Imagem ilustrativa de organização">
 
 
+
                     <div class="card-body text-center">
 
                         <h5
                             class="card-title fw-bold"
-                            style="color: #34464B;">
+                            style="color: #243438;">
 
                             Organização
 
                         </h5>
 
 
+
                         <p
                             class="card-text fw-medium"
-                            style="color: #4B5D62;">
+                            style="color: #617477;">
 
                             Coloque aqui uma descrição.
 
@@ -393,6 +420,7 @@
                 </div>
 
             </div>
+
 
 
             <!-- FOTO 3 -->
@@ -408,20 +436,22 @@
                         alt="Imagem ilustrativa de cuidado com o ambiente">
 
 
+
                     <div class="card-body text-center">
 
                         <h5
                             class="card-title fw-bold"
-                            style="color: #34464B;">
+                            style="color: #243438;">
 
                             Cuidado com o ambiente
 
                         </h5>
 
 
+
                         <p
                             class="card-text fw-medium"
-                            style="color: #4B5D62;">
+                            style="color: #617477;">
 
                             Coloque aqui uma descrição.
 
@@ -434,9 +464,11 @@
             </div>
 
 
+
         </div>
 
     </section>
+
 
 
     <!-- =========================================
@@ -445,11 +477,12 @@
 
     <section
         class="py-5"
-        style="background-color: #315F6B;">
+        style="background-color: #126E68;">
 
         <div class="container">
 
             <div class="row align-items-center g-4">
+
 
 
                 <!-- TEXTO -->
@@ -465,9 +498,10 @@
                     </h2>
 
 
+
                     <p
                         class="mb-md-0 fw-medium"
-                        style="color: #EAF3F5;">
+                        style="color: #E7F5F1;">
 
                         Consulte os profissionais cadastrados no
                         LimpaLar, conheça seus perfis e encontre uma
@@ -476,6 +510,7 @@
                     </p>
 
                 </div>
+
 
 
                 <!-- BOTÃO -->
@@ -487,7 +522,7 @@
                         href="profissionais.php"
                         class="btn btn-light btn-lg px-4 py-3 fw-bold"
                         style="
-                            color: #315F6B;
+                            color: #126E68;
                             border-radius: 10px;
                         ">
 
@@ -498,6 +533,7 @@
                 </div>
 
 
+
             </div>
 
         </div>
@@ -505,7 +541,9 @@
     </section>
 
 
+
 </main>
+
 
 
 <?php include "rodape.php"; ?>

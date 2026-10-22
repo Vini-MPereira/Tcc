@@ -20,6 +20,73 @@ if (isset($_GET["acao"]) && $_GET["acao"] === "buscar_bairro") {
     exit;
 }
 
+// CONSULTAR A DISPONIBILIDADE DO PROFISSIONAL
+if (
+    isset($_GET["acao"]) &&
+    $_GET["acao"] === "disponibilidade"
+) {
+    header("Content-Type: application/json; charset=UTF-8");
+
+    $idUsuario = filter_input(
+        INPUT_GET,
+        "id_usuario",
+        FILTER_VALIDATE_INT
+    );
+
+    if (!$idUsuario || $idUsuario < 1) {
+        http_response_code(400);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "Profissional inválido.",
+            "horarios" => []
+        ], JSON_UNESCAPED_UNICODE);
+
+        exit;
+    }
+
+    $sqlAgenda = "
+        SELECT DIA_SEMANA, HORA_INICIO, HORA_FIM
+        FROM DISPONIBILIDADE
+        WHERE ID_USUARIO = ?
+          AND ATIVO = 1
+        ORDER BY HORA_INICIO
+    ";
+
+    $stmtAgenda = mysqli_prepare($conexao, $sqlAgenda);
+
+    if (!$stmtAgenda) {
+        http_response_code(500);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "Erro ao consultar a agenda.",
+            "horarios" => []
+        ], JSON_UNESCAPED_UNICODE);
+
+        exit;
+    }
+
+    mysqli_stmt_bind_param($stmtAgenda, "i", $idUsuario);
+    mysqli_stmt_execute($stmtAgenda);
+
+    $resultadoAgenda = mysqli_stmt_get_result($stmtAgenda);
+    $horarios = [];
+
+    while ($linha = mysqli_fetch_assoc($resultadoAgenda)) {
+        $horarios[] = $linha;
+    }
+
+    mysqli_stmt_close($stmtAgenda);
+
+    echo json_encode([
+        "sucesso" => true,
+        "horarios" => $horarios
+    ], JSON_UNESCAPED_UNICODE);
+
+    exit;
+}
+
 function escapar($texto)
 
 {
@@ -214,9 +281,29 @@ function mostrar_card($anuncio)
 
                 <?php endif; ?>
 
-                <a href="entrar.php" class="btn btn-primary w-100">
+                
 
+<button
+    type="button"
+    class="btn btn-primary w-100"
+    data-bs-toggle="modal"
+    data-bs-target="#modalSolicitar"
+    data-id-usuario="<?= (int) $anuncio['ID_USUARIO']; ?>"
+    data-nome="<?= escapar($anuncio['NOME']); ?>"
+    data-descricao="<?= escapar($anuncio['DESCRICAO'] ?? ''); ?>"
+    data-bairro="<?= escapar($anuncio['BAIRRO'] ?? ''); ?>"
+    data-preco="<?= $anuncio['PRECO'] !== null && $anuncio['PRECO'] !== ''
+        ? 'R$ ' . number_format((float) $anuncio['PRECO'], 2, ',', '.')
+        : 'A combinar'; ?>"
+    data-foto="<?= escapar(
+        !empty($anuncio['FOTO_USUARIO'])
+        ? $anuncio['FOTO_USUARIO']
+        : ($anuncio['FOTO'] ?? '')
+    ); ?>"
+                >
                     👤 Ver profissional
+</button>
+                    
 
                 </a>
 
@@ -747,5 +834,486 @@ btnCep.addEventListener("click", async () => {
 });
 
 </script>
+
+
+<!-- MODAL: PERFIL E AGENDA DO PROFISSIONAL -->
+<div class="modal fade" id="modalSolicitar" tabindex="-1"
+     aria-labelledby="tituloModalProfissional" aria-hidden="true">
+
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content limpa-modal">
+
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="tituloModalProfissional">
+                        Conheça o profissional
+                    </h5>
+                    <small class="text-muted">
+                        Confira as informações e os horários disponíveis.
+                    </small>
+                </div>
+
+                <button type="button" class="btn-close"
+                        data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row g-4">
+
+                    <!-- LADO ESQUERDO: FOTO E PERFIL -->
+                    <div class="col-12 col-md-4">
+                        <div class="perfil-profissional">
+                            <img id="modalFotoProfissional"
+                                 src=""
+                                 alt="Foto do profissional"
+                                 class="foto-profissional-modal"
+                                 hidden>
+
+                            <div id="modalFotoPlaceholder"
+                                 class="foto-placeholder">
+                                <span>👤</span>
+                            </div>
+
+                            <h4 id="modalNomeProfissional" class="mt-3">
+                                Profissional
+                            </h4>
+
+                            <p class="text-muted mb-2">
+                                <span>📍</span>
+                                <span id="modalBairroProfissional">
+                                    Local não informado
+                                </span>
+                            </p>
+
+                            <div class="preco-profissional">
+                                <small>Valor anunciado</small>
+                                <h4 id="modalPrecoProfissional">
+                                    A combinar
+                                </h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CENTRO: DESCRIÇÃO -->
+                    <div class="col-12 col-md-4">
+                        <h5 class="titulo-secao-modal">Sobre o profissional</h5>
+
+                        <p id="modalDescricaoProfissional"
+                           class="descricao-profissional">
+                            Nenhuma descrição informada.
+                        </p>
+
+                        <div class="aviso-agenda">
+                            <strong>Antes de solicitar</strong>
+                            <p class="mb-0">
+                                Selecione uma data e um horário disponíveis.
+                                A solicitação deverá ser confirmada pelo sistema.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- LADO DIREITO: CALENDÁRIO E HORÁRIOS -->
+                    <div class="col-12 col-md-4">
+                        <h5 class="titulo-secao-modal">Agenda</h5>
+
+                        <label for="dataServico" class="form-label">
+                            Escolha o dia
+                        </label>
+
+                        <input type="date"
+                               id="dataServico"
+                               class="form-control"
+                               min="<?= date('Y-m-d'); ?>">
+
+                        <label for="horarioServico" class="form-label mt-3">
+                            Horário disponível
+                        </label>
+
+                        <select id="horarioServico" class="form-select">
+                            <option value="">Escolha primeiro uma data</option>
+                        </select>
+
+                        <div id="mensagemAgenda"
+                             class="small text-muted mt-3"
+                             aria-live="polite">
+                            Selecione uma data para consultar os horários.
+                        </div>
+
+                        <button type="button"
+                                id="btnSolicitarServico"
+                                class="btn btn-primary w-100 mt-4">
+                            Solicitar serviço
+                        </button>
+
+                        <p class="small text-muted mt-2 mb-0">
+                            A escolha do horário não garante a reserva até a
+                            solicitação ser registrada e confirmada.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .limpa-modal {
+        border: 0;
+        border-radius: 18px;
+        overflow: hidden;
+    }
+
+    .limpa-modal .modal-header {
+        background: #E7F5F1;
+        border-bottom: 1px solid #D5E5E1;
+        padding: 22px;
+    }
+
+    .limpa-modal .modal-body {
+        padding: 24px;
+    }
+
+    .perfil-profissional {
+        text-align: center;
+        padding: 20px 14px;
+        background: #F4F9F7;
+        border-radius: 14px;
+        height: 100%;
+    }
+
+    .foto-profissional-modal {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 4px solid #18A999;
+    }
+
+    .foto-placeholder {
+        width: 150px;
+        height: 150px;
+        margin: auto;
+        border-radius: 50%;
+        background: #D5E5E1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 55px;
+    }
+
+    .foto-placeholder[hidden],
+    .foto-profissional-modal[hidden] {
+        display: none !important;
+    }
+
+    .preco-profissional {
+        margin-top: 22px;
+        padding: 14px;
+        background: white;
+        border-radius: 12px;
+    }
+
+    .preco-profissional small {
+        color: #617477;
+    }
+
+    .preco-profissional h4 {
+        color: #126E68;
+        font-weight: 700;
+        margin: 5px 0 0;
+    }
+
+    .titulo-secao-modal {
+        color: #126E68;
+        font-weight: 700;
+        margin-bottom: 16px;
+    }
+
+    .descricao-profissional {
+        color: #243438;
+        line-height: 1.7;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+    }
+
+    .aviso-agenda {
+        padding: 14px;
+        border-radius: 10px;
+        background: #E7F5F1;
+        color: #243438;
+        font-size: 14px;
+    }
+
+    .aviso-agenda strong {
+        display: block;
+        color: #126E68;
+        margin-bottom: 6px;
+    }
+
+    #dataServico,
+    #horarioServico {
+        min-height: 45px;
+    }
+
+    #btnSolicitarServico {
+        background: #18A999;
+        border-color: #18A999;
+        padding: 12px;
+        font-weight: 600;
+    }
+
+    #btnSolicitarServico:hover {
+        background: #0F857C;
+        border-color: #0F857C;
+    }
+
+    @media (max-width: 767px) {
+        .limpa-modal .modal-body {
+            padding: 16px;
+        }
+
+        .foto-profissional-modal,
+        .foto-placeholder {
+            width: 120px;
+            height: 120px;
+        }
+    }
+</style>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('modalSolicitar');
+
+    if (!modal) return;
+
+    const foto = document.getElementById('modalFotoProfissional');
+    const placeholder = document.getElementById('modalFotoPlaceholder');
+    const nome = document.getElementById('modalNomeProfissional');
+    const descricao = document.getElementById('modalDescricaoProfissional');
+    const bairro = document.getElementById('modalBairroProfissional');
+    const preco = document.getElementById('modalPrecoProfissional');
+    const data = document.getElementById('dataServico');
+    const horario = document.getElementById('horarioServico');
+    const mensagem = document.getElementById('mensagemAgenda');
+    const botaoSolicitar = document.getElementById('btnSolicitarServico');
+
+    let idUsuarioAtual = null;
+    let agendaAtual = [];
+
+    const diasSemana = {
+        DOMINGO: 0,
+        SEGUNDA: 1,
+        TERCA: 2,
+        QUARTA: 3,
+        QUINTA: 4,
+        SEXTA: 5,
+        SABADO: 6
+    };
+
+    function limparHorarios(texto) {
+        horario.innerHTML = '';
+
+        const opcao = document.createElement('option');
+        opcao.value = '';
+        opcao.textContent = texto;
+
+        horario.appendChild(opcao);
+    }
+
+    function dataLocalISO() {
+        const agora = new Date();
+        const ano = agora.getFullYear();
+        const mes = String(agora.getMonth() + 1).padStart(2, '0');
+        const dia = String(agora.getDate()).padStart(2, '0');
+
+        return `${ano}-${mes}-${dia}`;
+    }
+
+    function diaSemanaDaData(valor) {
+        const partes = valor.split('-').map(Number);
+        const dataEscolhida = new Date(
+            partes[0],
+            partes[1] - 1,
+            partes[2]
+        );
+
+        return dataEscolhida.getDay();
+    }
+
+    function montarOpcoesDeHorario() {
+        limparHorarios('Selecione um horário');
+
+        const dataEscolhida = data.value;
+
+        if (!dataEscolhida) {
+            mensagem.textContent = 'Selecione uma data para consultar os horários.';
+            return;
+        }
+
+        if (dataEscolhida < dataLocalISO()) {
+            mensagem.textContent = 'Escolha uma data de hoje em diante.';
+            limparHorarios('Data inválida');
+            return;
+        }
+
+        const dia = diaSemanaDaData(dataEscolhida);
+
+        const disponibilidadeDoDia = agendaAtual.filter(function (item) {
+            return diasSemana[item.DIA_SEMANA] === dia;
+        });
+
+        if (disponibilidadeDoDia.length === 0) {
+            mensagem.textContent =
+                'Este profissional não informou disponibilidade para esse dia.';
+
+            limparHorarios('Sem horários disponíveis');
+            return;
+        }
+
+        let quantidade = 0;
+
+        disponibilidadeDoDia.forEach(function (item) {
+            const inicio = item.HORA_INICIO.substring(0, 5);
+            const fim = item.HORA_FIM.substring(0, 5);
+
+            const partesInicio = inicio.split(':').map(Number);
+            const partesFim = fim.split(':').map(Number);
+
+            let minutos = partesInicio[0] * 60 + partesInicio[1];
+            const fimMinutos = partesFim[0] * 60 + partesFim[1];
+
+            // Exibe opções em intervalos de 1 hora.
+            while (minutos < fimMinutos) {
+                const hora = String(Math.floor(minutos / 60)).padStart(2, '0');
+                const minuto = String(minutos % 60).padStart(2, '0');
+                const valor = `${hora}:${minuto}`;
+
+                const opcao = document.createElement('option');
+                opcao.value = valor;
+                opcao.textContent = valor;
+
+                horario.appendChild(opcao);
+                quantidade++;
+
+                minutos += 60;
+            }
+        });
+
+        if (quantidade === 0) {
+            mensagem.textContent =
+                'Não há horários disponíveis para essa data.';
+            limparHorarios('Sem horários disponíveis');
+            return;
+        }
+
+        mensagem.textContent = 'Escolha um dos horários apresentados.';
+    }
+
+    modal.addEventListener('show.bs.modal', async function (evento) {
+        const botao = evento.relatedTarget;
+
+        if (!botao) return;
+
+        idUsuarioAtual = botao.dataset.idUsuario;
+        agendaAtual = [];
+
+        nome.textContent = botao.dataset.nome || 'Profissional';
+        descricao.textContent =
+            botao.dataset.descricao || 'Nenhuma descrição informada.';
+        bairro.textContent =
+            botao.dataset.bairro || 'Local não informado';
+        preco.textContent = botao.dataset.preco || 'A combinar';
+
+        const caminhoFoto = botao.dataset.foto || '';
+
+        if (caminhoFoto) {
+            foto.src = caminhoFoto;
+            foto.hidden = false;
+            placeholder.hidden = true;
+
+            foto.onerror = function () {
+                foto.hidden = true;
+                placeholder.hidden = false;
+            };
+        } else {
+            foto.removeAttribute('src');
+            foto.hidden = true;
+            placeholder.hidden = false;
+        }
+
+        data.value = '';
+        data.min = dataLocalISO();
+
+        limparHorarios('Escolha primeiro uma data');
+        mensagem.textContent = 'Carregando disponibilidade...';
+
+        try {
+            const resposta = await fetch(
+                'profissionais.php?acao=disponibilidade&id_usuario=' +
+                encodeURIComponent(idUsuarioAtual),
+                {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+
+            const resultado = await resposta.json();
+
+            if (!resposta.ok || !resultado.sucesso) {
+                throw new Error(
+                    resultado.mensagem || 'Erro ao consultar agenda.'
+                );
+            }
+
+            agendaAtual = resultado.horarios || [];
+
+            if (agendaAtual.length === 0) {
+                mensagem.textContent =
+                    'Este profissional ainda não cadastrou seus horários.';
+            } else {
+                mensagem.textContent =
+                    'Disponibilidade carregada. Escolha uma data.';
+            }
+        } catch (erro) {
+            agendaAtual = [];
+            mensagem.textContent =
+                'Não foi possível carregar a agenda. Tente novamente.';
+            console.error(erro);
+        }
+    });
+
+    data.addEventListener('change', montarOpcoesDeHorario);
+
+    botaoSolicitar.addEventListener('click', function () {
+        if (!idUsuarioAtual) {
+            alert('Não foi possível identificar o profissional.');
+            return;
+        }
+
+        if (!data.value || !horario.value) {
+            alert('Escolha uma data e um horário disponíveis.');
+            return;
+        }
+
+        if (data.value < dataLocalISO()) {
+            alert('Escolha uma data de hoje em diante.');
+            return;
+        }
+
+        alert(
+            'Você selecionou o dia ' +
+            data.value.split('-').reverse().join('/') +
+            ' às ' + horario.value + '.\n\n' +
+            'A agenda foi consultada, mas esta versão ainda não registra ' +
+            'a solicitação no banco de dados.'
+        );
+    });
+});
+</script>
+
 
 <?php include "rodape.php"; ?>

@@ -80,6 +80,109 @@ $nome_usuario = $_SESSION["NOME_USUARIO"];
     <div class="row g-4 justify-content-center">
 
 
+<!-- =================================================
+     MINHAS AVALIAÇÕES
+================================================== -->
+
+<div class="col-12 col-md-6">
+
+    <div
+        class="card h-100 border-0 shadow-sm rounded-4">
+
+        <div
+            class="card-body p-4 p-md-5 text-center">
+
+            <div class="fs-1 mb-3">
+                ⭐
+            </div>
+
+            <h2
+                class="fw-bold"
+                style="color:#126E68;">
+
+                Minhas avaliações
+
+            </h2>
+
+            <p
+                class="mt-3"
+                style="color:#617477;">
+
+                Avalie os profissionais após
+                a conclusão da faxina.
+
+            </p>
+
+            <a
+                href="avaliacoes.php"
+                class="btn btn-lg text-white px-4 mt-3"
+                style="
+                    background-color:#18A999;
+                    border-color:#18A999;
+                ">
+
+                ⭐ Ver avaliações
+
+            </a>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =================================================
+     CONCLUIR FAXINAS
+================================================== -->
+
+<div class="col-12 col-md-6">
+
+    <div
+        class="card h-100 border-0 shadow-sm rounded-4">
+
+        <div
+            class="card-body p-4 p-md-5 text-center">
+
+            <div class="fs-1 mb-3">
+                🧹
+            </div>
+
+            <h2
+                class="fw-bold"
+                style="color:#126E68;">
+
+                Minhas faxinas
+
+            </h2>
+
+            <p
+                class="mt-3"
+                style="color:#617477;">
+
+                Consulte os serviços contratados
+                e confirme as faxinas realizadas.
+
+            </p>
+
+            <a
+                href="concluir_faxina.php"
+                class="btn btn-lg text-white px-4 mt-3"
+                style="
+                    background-color:#18A999;
+                    border-color:#18A999;
+                ">
+
+                ✓ Gerenciar faxinas
+
+            </a>
+
+        </div>
+
+    </div>
+
+</div>
+
 
         <!-- =================================================
              OFERECER SERVIÇO

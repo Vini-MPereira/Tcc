@@ -317,6 +317,8 @@ function mostrar_card($anuncio)
 
 }
 
+
+
 ?>
 
 <?php include "cabecalho.php"; ?>

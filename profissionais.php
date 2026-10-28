@@ -1310,8 +1310,10 @@ document.addEventListener('DOMContentLoaded', function () {
             'Você selecionou o dia ' +
             data.value.split('-').reverse().join('/') +
             ' às ' + horario.value + '.\n\n' +
-            'A agenda foi consultada, mas esta versão ainda não registra ' +
-            'a solicitação no banco de dados.'
+            "⚠️ AVISO DO ADMINISTRADOR\n\n" +
+    "ADM VINI AINDA PRECISA CONECTAR A AGENDA COM O BANCO DE DADOS.\n\n" +
+    "O AGENDAMENTO AINDA NÃO ESTÁ FUNCIONANDO.\n\n" +
+    "ATT: ADM VINI"
         );
     });
 });

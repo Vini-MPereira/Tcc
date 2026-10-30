@@ -189,10 +189,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     );
 
 
-    $cep = trim(
-        $_POST["cep"] ?? ""
-    );
-
 
     $bairros_post = $_POST["bairros"] ?? [];
 
@@ -433,38 +429,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     );
 
 
-                // =================================================
-                // CADASTRA O ANÚNCIO
-                // =================================================
+               // =================================================
+// CADASTRA O ANÚNCIO
+// =================================================
 
-                $sql = "
-                    INSERT INTO ANUNCIO
-                    (
-                        ID_USUARIO,
-                        ID_CATEGORIA,
-                        TITULO,
-                        DESCRICAO,
-                        PRECO,
-                        CEP,
-                        ESTADO,
-                        CIDADE,
-                        BAIRRO,
-                        STATUS
-                    )
-                    VALUES
-                    (
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        'SP',
-                        'Bauru',
-                        ?,
-                        'ATIVO'
-                    )
-                ";
+$sql = "
+    INSERT INTO ANUNCIO
+    (
+        ID_USUARIO,
+        ID_CATEGORIA,
+        TITULO,
+        DESCRICAO,
+        PRECO,
+        ESTADO,
+        CIDADE,
+        BAIRRO,
+        STATUS
+    )
+    VALUES
+    (
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        'SP',
+        'Bauru',
+        ?,
+        'ATIVO'
+    )
+";
 
 
                 $stmt =
@@ -483,13 +477,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                     mysqli_stmt_bind_param(
                         $stmt,
-                        "iissdss",
+                        "iissds",
                         $id_usuario,
                         $id_categoria,
                         $titulo,
                         $descricao,
                         $preco,
-                        $cep,
                         $bairro
                     );
 
@@ -521,8 +514,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         $preco =
                             "";
 
-                        $cep =
-                            "";
 
                         $bairros_selecionados =
                             [];
@@ -803,45 +794,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
 
-                            <!-- =================================================
-                                 CEP
-                            ================================================== -->
-
-                            <div class="mb-4">
-
-                                <label
-                                    for="cep"
-                                    class="form-label">
-
-                                    Encontrar bairro pelo CEP
-
-                                </label>
-
-
-                                <div class="input-group">
-
-                                    <input
-                                        type="text"
-                                        class="form-control"
-                                        id="cep"
-                                        name="cep"
-                                        maxlength="9"
-                                        placeholder="17000-000">
-
-
-                                    <button
-                                        type="button"
-                                        class="btn text-white"
-                                        id="buscarCep"
-                                        style="
-                                            background-color: #18A999;
-                                        ">
-
-                                        Buscar
-
-                                    </button>
-
-                                </div>
 
 
                                 <div
@@ -855,56 +807,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                             </div>
 
-
-
-                            <!-- =================================================
-                                 BAIRRO ENCONTRADO
-                            ================================================== -->
-
-                            <div
-                                id="bairroCepContainer"
-                                class="mb-4"
-                                style="display: none;">
-
-                                <div
-                                    class="p-3 rounded-3"
-                                    style="
-                                        background-color: #E7F5F1;
-                                    ">
-
-                                    <div
-                                        class="small mb-1"
-                                        style="color: #617477;">
-
-                                        Bairro encontrado
-
-                                    </div>
-
-
-                                    <div
-                                        id="bairroEncontrado"
-                                        class="fw-bold"
-                                        style="color: #126E68;">
-
-                                    </div>
-
-
-                                    <button
-                                        type="button"
-                                        class="btn btn-sm mt-2"
-                                        id="adicionarBairroCep"
-                                        style="
-                                            background-color: #18A999;
-                                            color: white;
-                                        ">
-
-                                        + Adicionar bairro
-
-                                    </button>
-
-                                </div>
-
-                            </div>
 
 
 
@@ -1133,80 +1035,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <script>
 
-document.addEventListener(
-    "DOMContentLoaded",
-    function () {
-
-
-        // =================================================
-        // ELEMENTOS
-        // =================================================
-
-        const pesquisaBairro =
-            document.getElementById(
-                "pesquisaBairro"
-            );
-
-
-        const listaBairros =
-            document.querySelectorAll(
-                ".bairro-item"
-            );
-
-
-        const checkboxes =
-            document.querySelectorAll(
-                ".bairro-checkbox"
-            );
-
-
-        const bairrosSelecionados =
-            document.getElementById(
-                "bairrosSelecionados"
-            );
-
-
-        const nenhumBairro =
-            document.getElementById(
-                "nenhumBairro"
-            );
-
-
-        const cepInput =
-            document.getElementById(
-                "cep"
-            );
-
-
-        const buscarCep =
-            document.getElementById(
-                "buscarCep"
-            );
-
-
-        const resultadoCep =
-            document.getElementById(
-                "resultadoCep"
-            );
-
-
-        const bairroCepContainer =
-            document.getElementById(
-                "bairroCepContainer"
-            );
-
-
-        const bairroEncontrado =
-            document.getElementById(
-                "bairroEncontrado"
-            );
-
-
-        const adicionarBairroCep =
-            document.getElementById(
-                "adicionarBairroCep"
-            );
-
 
 
         // =================================================
@@ -1374,268 +1202,6 @@ document.addEventListener(
         );
 
 
-
-        // =================================================
-        // FORMATA CEP
-        // =================================================
-
-        cepInput.addEventListener(
-            "input",
-            function () {
-
-
-                let valor =
-                    this.value.replace(
-                        /\D/g,
-                        ""
-                    );
-
-
-                if (valor.length > 5) {
-
-
-                    valor =
-                        valor.substring(
-                            0,
-                            5
-                        )
-                        + "-"
-                        +
-                        valor.substring(
-                            5,
-                            8
-                        );
-
-                }
-
-
-                this.value =
-                    valor;
-
-            }
-        );
-
-
-
-        // =================================================
-        // BUSCAR CEP
-        // =================================================
-
-        buscarCep.addEventListener(
-            "click",
-            async function () {
-
-
-                const cep =
-                    cepInput.value.replace(
-                        /\D/g,
-                        ""
-                    );
-
-
-                if (cep.length !== 8) {
-
-
-                    resultadoCep.innerText =
-                        "Digite um CEP válido.";
-
-                    return;
-
-                }
-
-
-                resultadoCep.innerText =
-                    "Buscando bairro...";
-
-
-                try {
-
-
-                    const resposta =
-                        await fetch(
-                            "https://viacep.com.br/ws/"
-                            + cep
-                            + "/json/"
-                        );
-
-
-                    const dados =
-                        await resposta.json();
-
-
-                    // =================================
-                    // CEP NÃO EXISTE
-                    // =================================
-
-                    if (dados.erro) {
-
-
-                        resultadoCep.innerText =
-                            "CEP não encontrado.";
-
-                        bairroCepContainer.style.display =
-                            "none";
-
-                        return;
-
-                    }
-
-
-
-                    // =================================
-                    // CONFERE BAURU
-                    // =================================
-
-                    const cidade =
-                        (
-                            dados.localidade
-                            || ""
-                        )
-                        .toLowerCase();
-
-
-                    const uf =
-                        (
-                            dados.uf
-                            || ""
-                        )
-                        .toUpperCase();
-
-
-                    if (
-                        cidade !== "bauru"
-                        ||
-                        uf !== "SP"
-                    ) {
-
-
-                        resultadoCep.innerText =
-                            "Esse CEP não pertence a Bauru - SP.";
-
-                        bairroCepContainer.style.display =
-                            "none";
-
-                        return;
-
-                    }
-
-
-
-                    // =================================
-                    // SEM BAIRRO
-                    // =================================
-
-                    if (!dados.bairro) {
-
-
-                        resultadoCep.innerText =
-                            "Esse CEP não retornou um bairro.";
-
-                        bairroCepContainer.style.display =
-                            "none";
-
-                        return;
-
-                    }
-
-
-
-                    // =================================
-                    // MOSTRA BAIRRO
-                    // =================================
-
-                    bairroEncontrado.innerText =
-                        dados.bairro;
-
-
-                    bairroCepContainer.style.display =
-                        "block";
-
-
-                    resultadoCep.innerText =
-                        "Bairro encontrado.";
-
-                }
-
-
-                catch (erro) {
-
-
-                    resultadoCep.innerText =
-                        "Não foi possível consultar o CEP.";
-
-                }
-
-            }
-        );
-
-
-
-        // =================================================
-        // ADICIONAR BAIRRO ENCONTRADO
-        // =================================================
-
-        adicionarBairroCep.addEventListener(
-            "click",
-            function () {
-
-
-                const nomeBairro =
-                    bairroEncontrado.innerText
-                    .trim();
-
-
-                let encontrou =
-                    false;
-
-
-                checkboxes.forEach(
-                    function (checkbox) {
-
-
-                        if (
-                            checkbox.value
-                            .toLowerCase()
-                            ===
-                            nomeBairro
-                            .toLowerCase()
-                        ) {
-
-
-                            checkbox.checked =
-                                true;
-
-
-                            encontrou =
-                                true;
-
-                        }
-
-                    }
-                );
-
-
-                if (encontrou) {
-
-
-                    atualizarBairrosSelecionados();
-
-
-                    resultadoCep.innerText =
-                        "Bairro adicionado à sua área de atendimento.";
-
-                }
-
-                else {
-
-
-                    resultadoCep.innerText =
-                        "Esse bairro não está disponível na lista.";
-
-                }
-
-            }
-        );
 
 
 

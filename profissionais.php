@@ -1,31 +1,89 @@
+
 <?php
+// =====================================================
+// PROFISSIONAIS - LIMPA LAR / BAURU - SP
+// =====================================================
 
-session_start();
+// Mostra erros enquanto estamos testando no XAMPP.
+ini_set("display_errors", "1");
+error_reporting(E_ALL);
 
-include "conexao.php";
-
-include "bairros_bauru.php";
-
-if (isset($_GET["acao"]) && $_GET["acao"] === "buscar_bairro") {
-
-    header("Content-Type: application/json; charset=UTF-8");
-
-    $termo = trim($_GET["termo"] ?? "");
-
-    echo json_encode(
-        procurar_bairros($termo),
-        JSON_UNESCAPED_UNICODE
-    );
-
-    exit;
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// CONSULTAR A DISPONIBILIDADE DO PROFISSIONAL
-if (
-    isset($_GET["acao"]) &&
-    $_GET["acao"] === "disponibilidade"
-) {
-    header("Content-Type: application/json; charset=UTF-8");
+// =====================================================
+// FUNÇÕES DA TELA
+// =====================================================
+
+function escapar($texto)
+{
+    return htmlspecialchars(
+        (string)($texto ?? ""),
+        ENT_QUOTES,
+        "UTF-8"
+    );
+}
+
+// Usa o arquivo de estrelas quando estiver pronto.
+// Se ele ainda estiver vazio, usa uma função temporária.
+if (is_file(__DIR__ . "/exibir_estrelas.php")) {
+    require_once __DIR__ . "/exibir_estrelas.php";
+}
+
+if (!function_exists("exibir_estrelas")) {
+    function exibir_estrelas($nota)
+    {
+        $cheias = max(
+            0,
+            min(5, (int)round((float)$nota))
+        );
+
+        return '<span style="color:#E5A800">' .
+            str_repeat('★', $cheias) .
+            str_repeat('☆', 5 - $cheias) .
+            '</span>';
+    }
+}
+
+// =====================================================
+// CONEXÃO COM O BANCO
+// =====================================================
+
+$anuncios = [];
+$erro_consulta = "";
+$conexao_ok = false;
+
+try {
+    require_once __DIR__ . "/conexao.php";
+
+    $conexao_ok = isset($conexao)
+        && $conexao instanceof mysqli;
+
+    if (!$conexao_ok) {
+        throw new Exception(
+            "A conexão com o MySQL não foi iniciada."
+        );
+    }
+
+} catch (Throwable $erro) {
+
+    error_log(
+        "LimpaLar - conexão: " . $erro->getMessage()
+    );
+
+    $erro_consulta =
+        "Não foi possível conectar ao banco de dados. " .
+        "Verifique o MySQL no XAMPP.";
+}
+
+// =====================================================
+// CONSULTAR DISPONIBILIDADE DO PROFISSIONAL
+// =====================================================
+
+if (($_GET["acao"] ?? "") === "disponibilidade") {
+
+    header("Content-Type: application/json; charset=utf-8");
 
     $idUsuario = filter_input(
         INPUT_GET,
@@ -34,1290 +92,1383 @@ if (
     );
 
     if (!$idUsuario || $idUsuario < 1) {
+
         http_response_code(400);
 
         echo json_encode([
             "sucesso" => false,
             "mensagem" => "Profissional inválido.",
-            "horarios" => []
+            "horarios" => [],
+            "ocupados" => []
         ], JSON_UNESCAPED_UNICODE);
 
         exit;
     }
 
-    $sqlAgenda = "
-        SELECT DIA_SEMANA, HORA_INICIO, HORA_FIM
-        FROM DISPONIBILIDADE
-        WHERE ID_USUARIO = ?
-          AND ATIVO = 1
-        ORDER BY HORA_INICIO
-    ";
+    if (!$conexao_ok) {
 
-    $stmtAgenda = mysqli_prepare($conexao, $sqlAgenda);
-
-    if (!$stmtAgenda) {
-        http_response_code(500);
+        http_response_code(503);
 
         echo json_encode([
             "sucesso" => false,
-            "mensagem" => "Erro ao consultar a agenda.",
-            "horarios" => []
+            "mensagem" => $erro_consulta,
+            "horarios" => [],
+            "ocupados" => []
         ], JSON_UNESCAPED_UNICODE);
 
         exit;
     }
 
-    mysqli_stmt_bind_param($stmtAgenda, "i", $idUsuario);
-    mysqli_stmt_execute($stmtAgenda);
+    try {
 
-    $resultadoAgenda = mysqli_stmt_get_result($stmtAgenda);
-    $horarios = [];
+        // =================================================
+        // BUSCA A AGENDA DO PROFISSIONAL
+        // =================================================
 
-    while ($linha = mysqli_fetch_assoc($resultadoAgenda)) {
-        $horarios[] = $linha;
+        $sqlAgenda = "
+            SELECT
+                DIA_SEMANA,
+                HORA_INICIO,
+                HORA_FIM
+            FROM DISPONIBILIDADE
+            WHERE ID_USUARIO = ?
+              AND ATIVO = 1
+            ORDER BY HORA_INICIO
+        ";
+
+        $stmtAgenda = mysqli_prepare(
+            $conexao,
+            $sqlAgenda
+        );
+
+        mysqli_stmt_bind_param(
+            $stmtAgenda,
+            "i",
+            $idUsuario
+        );
+
+        mysqli_stmt_execute($stmtAgenda);
+
+        $resultadoAgenda = mysqli_stmt_get_result(
+            $stmtAgenda
+        );
+
+        $horarios = mysqli_fetch_all(
+            $resultadoAgenda,
+            MYSQLI_ASSOC
+        );
+
+        mysqli_stmt_close($stmtAgenda);
+
+        // =================================================
+        // BUSCA HORÁRIOS QUE JÁ ESTÃO OCUPADOS
+        // =================================================
+
+        $sqlOcupados = "
+            SELECT
+                DATE_FORMAT(
+                    DATA_SERVICO,
+                    '%Y-%m-%d'
+                ) AS DATA_SERVICO,
+
+                TIME_FORMAT(
+                    HORA_SERVICO,
+                    '%H:%i'
+                ) AS HORA_SERVICO
+
+            FROM CONTRATACAO
+
+            WHERE ID_PROFISSIONAL = ?
+              AND DATA_SERVICO >= CURDATE()
+              AND STATUS IN (
+                  'SOLICITADA',
+                  'ACEITA'
+              )
+        ";
+
+        $stmtOcupados = mysqli_prepare(
+            $conexao,
+            $sqlOcupados
+        );
+
+        mysqli_stmt_bind_param(
+            $stmtOcupados,
+            "i",
+            $idUsuario
+        );
+
+        mysqli_stmt_execute($stmtOcupados);
+
+        $resultadoOcupados = mysqli_stmt_get_result(
+            $stmtOcupados
+        );
+
+        $ocupados = mysqli_fetch_all(
+            $resultadoOcupados,
+            MYSQLI_ASSOC
+        );
+
+        mysqli_stmt_close($stmtOcupados);
+
+        echo json_encode([
+            "sucesso" => true,
+            "mensagem" => "",
+            "horarios" => $horarios,
+            "ocupados" => $ocupados
+        ], JSON_UNESCAPED_UNICODE);
+
+    } catch (Throwable $erro) {
+
+        error_log(
+            "LimpaLar - agenda: " . $erro->getMessage()
+        );
+
+        http_response_code(503);
+
+        $mensagem = (
+            stripos(
+                $erro->getMessage(),
+                "DISPONIBILIDADE"
+            ) !== false
+        )
+            ? "A tabela DISPONIBILIDADE ainda não existe. É necessário criá-la no banco."
+            : "Não foi possível carregar a agenda deste profissional.";
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => $mensagem,
+            "horarios" => [],
+            "ocupados" => []
+        ], JSON_UNESCAPED_UNICODE);
     }
-
-    mysqli_stmt_close($stmtAgenda);
-
-    echo json_encode([
-        "sucesso" => true,
-        "horarios" => $horarios
-    ], JSON_UNESCAPED_UNICODE);
 
     exit;
 }
 
-function escapar($texto)
-
-{
-
-    return htmlspecialchars($texto ?? "", ENT_QUOTES, "UTF-8");
-
-}
-
-$busca_bairro = trim($_GET["bairro"] ?? "");
-
-$bairro_oficial = resolver_bairro($_GET["bairro_oficial"] ?? "");
-
-$cep_pesquisa = preg_replace("/[^0-9]/", "", $_GET["cep"] ?? "");
-
-$sql = "
-
-    SELECT
-
-        A.ID_ANUNCIO,
-
-        A.ID_USUARIO,
-
-        A.TITULO,
-
-        A.DESCRICAO,
-
-        A.PRECO,
-
-        A.TIPO_PRECO,
-
-        A.FOTO,
-
-        A.CEP,
-
-        A.CIDADE,
-
-        A.BAIRRO,
-
-        A.STATUS,
-
-        A.DATA_CADASTRO,
-
-        U.NOME,
-
-        U.FOTO AS FOTO_USUARIO,
-
-        U.TELEFONE
-
-    FROM ANUNCIO A
-
-    INNER JOIN USUARIO U ON U.ID_USUARIO = A.ID_USUARIO
-
-    WHERE A.STATUS = 'ATIVO'
-
-      AND U.ATIVO = 1
-
-    ORDER BY A.DATA_CADASTRO DESC
-
-";
-
-$resultado = mysqli_query($conexao, $sql);
-
-$anuncios = [];
-
-if ($resultado) {
-
-    while ($linha = mysqli_fetch_assoc($resultado)) {
-
-        $anuncios[] = $linha;
-
-    }
-
-}
-
-$exatos = [];
-
-$outros = [];
-
-if ($bairro_oficial !== "") {
-
-    $alvo = normalizar_bairro($bairro_oficial);
-
-    foreach ($anuncios as $anuncio) {
-
-        $encontrou = false;
-
-        foreach (explode(",", $anuncio["BAIRRO"] ?? "") as $bairro) {
-
-            $canonico = resolver_bairro(trim($bairro));
-
-            if ($canonico !== "") {
-
-                $valor_comparar = $canonico;
-
-            } else {
-
-                $valor_comparar = trim($bairro);
-
-            }
-
-            if (normalizar_bairro($valor_comparar) === $alvo) {
-
-                $encontrou = true;
-
-                break;
-
-            }
-
-        }
-
-        if ($encontrou) {
-
-            $exatos[] = $anuncio;
-
-        } else {
-
-            $outros[] = $anuncio;
-
-        }
-
-    }
-
-} else {
-
-    $outros = $anuncios;
-
-}
-
-function mostrar_card($anuncio)
-
-{
-
-    $foto = trim($anuncio["FOTO"] ?? "");
-
-    $descricao = $anuncio["DESCRICAO"] ?? "";
-
-    $bairros = array_filter(array_map("trim", explode(",", $anuncio["BAIRRO"] ?? "")));
-
-    ?>
-
-    <div class="col-md-6 col-lg-4">
-
-        <div class="card-profissional">
-
-            <?php if ($foto !== "" && file_exists($foto)): ?>
-
-                <img src="<?= escapar($foto); ?>" class="foto-profissional" alt="Foto do profissional">
-
-            <?php else: ?>
-
-                <div class="sem-foto">🧹</div>
-
-            <?php endif; ?>
-
-            <div class="p-4">
-
-                <h5 class="nome-profissional mb-2">
-
-                    <?= escapar($anuncio["NOME"]); ?>
-
-                </h5>
-
-                <span class="badge text-bg-light">🧹 Faxina</span>
-
-                <p class="descricao-profissional mt-3">
-
-                    <?= nl2br(escapar($descricao)); ?>
-
-                </p>
-
-                <div class="mb-3">
-
-                    <?php foreach ($bairros as $bairro): ?>
-
-                        <span class="bairro-tag">
-
-                            📍 <?= escapar(nome_exibicao_bairro($bairro)); ?>
-
-                        </span>
-
-                    <?php endforeach; ?>
-
-                </div>
-
-                <?php if ($anuncio["PRECO"] !== null && $anuncio["PRECO"] !== ""): ?>
-
-                    <div class="preco mb-3">
-
-                        A partir de R$ <?= number_format((float)$anuncio["PRECO"], 2, ",", "."); ?>
-
-                    </div>
-
-                <?php endif; ?>
-
-                
-
-<button
-    type="button"
-    class="btn btn-primary w-100"
-    data-bs-toggle="modal"
-    data-bs-target="#modalSolicitar"
-    data-id-usuario="<?= (int) $anuncio['ID_USUARIO']; ?>"
-    data-nome="<?= escapar($anuncio['NOME']); ?>"
-    data-descricao="<?= escapar($anuncio['DESCRICAO'] ?? ''); ?>"
-    data-bairro="<?= escapar($anuncio['BAIRRO'] ?? ''); ?>"
-    data-preco="<?= $anuncio['PRECO'] !== null && $anuncio['PRECO'] !== ''
-        ? 'R$ ' . number_format((float) $anuncio['PRECO'], 2, ',', '.')
-        : 'A combinar'; ?>"
-    data-foto="<?= escapar(
-        !empty($anuncio['FOTO_USUARIO'])
-        ? $anuncio['FOTO_USUARIO']
-        : ($anuncio['FOTO'] ?? '')
-    ); ?>"
-                >
-                    👤 Ver profissional
-</button>
-                    
-
-                </a>
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <?php
-
-}
-
-
-
-?>
-
-<?php include "cabecalho.php"; ?>
-
-<style>
-
-.titulo-pagina{color:#126E68;font-weight:700}
-
-.subtitulo-pagina{color:#617477}
-
-.filtro-box{background:#E7F5F1;border-radius:18px;padding:25px;border:1px solid #D5E5E1;margin-bottom:30px}
-
-.campo-label{font-weight:600;color:#126E68}
-
-.campo-bairro{position:relative}
-
-.campo-bairro input{border-radius:10px;padding:13px}
-
-.sugestoes-bairro{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #D5E5E1;border-radius:10px;margin-top:5px;z-index:1000;max-height:300px;overflow-y:auto;display:none;box-shadow:0 5px 20px rgba(0,0,0,.12)}
-
-.item-sugestao{width:100%;background:#fff;border:0;text-align:left;padding:12px 15px;cursor:pointer}
-
-.item-sugestao:hover{background:#E7F5F1}
-
-.nome-curto{color:#126E68;font-weight:700}
-
-.nome-oficial{color:#617477;font-size:13px}
-
-.aviso-resultados{background:#fff;border-left:5px solid #18A999;padding:15px 18px;border-radius:10px;margin-bottom:25px}
-
-.aviso-sem-resultado{background:#fff8e8;border-left:5px solid #F2B84B;padding:18px;border-radius:10px;margin-bottom:25px}
-
-.card-profissional{border:0;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 5px 20px rgba(0,0,0,.07);height:100%}
-
-.foto-profissional,.sem-foto{width:100%;height:190px}
-
-.foto-profissional{object-fit:cover}
-
-.sem-foto{background:#E7F5F1;display:flex;justify-content:center;align-items:center;font-size:60px}
-
-.nome-profissional{color:#126E68;font-weight:700}
-
-.descricao-profissional{color:#617477;min-height:55px}
-
-.bairro-tag{display:inline-block;background:#E7F5F1;color:#126E68;border-radius:20px;padding:5px 10px;margin:3px;font-size:13px}
-
-.preco{color:#126E68;font-weight:700;font-size:18px}
-
-</style>
-
-<div class="container py-5">
-
-    <div class="text-center mb-4">
-
-        <h1 class="titulo-pagina">🧹 Encontre um profissional</h1>
-
-        <p class="subtitulo-pagina">
-
-            Digite o bairro do jeito que você costuma falar.
-
-        </p>
-
-    </div>
-
-    <div class="filtro-box">
-
-        <h4 class="mb-4">📍 Onde você precisa da faxina?</h4>
-
-        <form method="GET" action="profissionais.php" id="formPesquisa">
-
-            <div class="row g-3">
-
-                <div class="col-lg-8">
-
-                    <label class="campo-label mb-2">🏘️ Digite seu bairro</label>
-
-                    <div class="campo-bairro">
-
-                        <input
-
-                            type="text"
-
-                            class="form-control"
-
-                            id="campoBairro"
-
-                            name="bairro"
-
-                            value="<?= escapar($busca_bairro); ?>"
-
-                            placeholder="Ex.: Geisel, Mary Dota, Pagani..."
-
-                            autocomplete="off"
-
-                        >
-
-                        <input
-
-                            type="hidden"
-
-                            name="bairro_oficial"
-
-                            id="bairroOficial"
-
-                            value="<?= escapar($bairro_oficial); ?>"
-
-                        >
-
-                        <div class="sugestoes-bairro" id="sugestoesBairro"></div>
-
-                    </div>
-
-                    <small class="text-muted">
-
-                        Você pode escrever o nome popular. O LimpaLar usa o nome oficial para procurar.
-
-                    </small>
-
-                </div>
-
-                <div class="col-lg-4">
-
-                    <label class="campo-label mb-2">📮 Ou procure pelo CEP</label>
-
-                    <div class="input-group">
-
-                        <input
-
-                            type="text"
-
-                            id="cepPesquisa"
-
-                            class="form-control"
-
-                            maxlength="9"
-
-                            placeholder="00000-000"
-
-                            value="<?= escapar($cep_pesquisa); ?>"
-
-                        >
-
-                        <button type="button" class="btn btn-primary" id="btnCep">Buscar</button>
-
-                    </div>
-
-                    <small id="statusCep" class="text-muted">
-
-                        O CEP encontra o bairro automaticamente.
-
-                    </small>
-
-                </div>
-
-            </div>
-
-            <div class="mt-4">
-
-                <button type="submit" class="btn btn-primary">
-
-                    🔎 Procurar profissionais
-
-                </button>
-
-                <a href="profissionais.php" class="btn btn-outline-secondary">
-
-                    Limpar
-
-                </a>
-
-            </div>
-
-        </form>
-
-    </div>
-
-    <?php if ($bairro_oficial !== ""): ?>
-
-        <?php if (count($exatos) > 0): ?>
-
-            <div class="aviso-resultados">
-
-                <strong>
-
-                    📍 Profissionais que atendem <?= escapar($busca_bairro); ?>
-
-                </strong>
-
-                <div class="mt-1">
-
-                    Encontramos <?= count($exatos); ?> profissional(is).
-
-                </div>
-
-            </div>
-
-            <div class="row g-4">
-
-                <?php foreach ($exatos as $anuncio) { mostrar_card($anuncio); } ?>
-
-            </div>
-
-        <?php else: ?>
-
-            <div class="aviso-sem-resultado">
-
-                <h5>😕 Nenhum profissional encontrado nesse bairro.</h5>
-
-                <p class="mb-0">
-
-                    Não encontramos alguém atendendo exatamente
-
-                    <strong><?= escapar($busca_bairro); ?></strong>.
-
-                    <br>
-
-                    Abaixo estão outros profissionais cadastrados no LimpaLar.
-
-                </p>
-
-            </div>
-
-            <?php if (count($outros) > 0): ?>
-
-                <div class="row g-4">
-
-                    <?php foreach ($outros as $anuncio) { mostrar_card($anuncio); } ?>
-
-                </div>
-
-            <?php endif; ?>
-
-        <?php endif; ?>
-
-    <?php else: ?>
-
-        <h3 class="titulo-pagina mb-4">👇 Profissionais disponíveis</h3>
-
-        <?php if (count($anuncios) > 0): ?>
-
-            <div class="row g-4">
-
-                <?php foreach ($anuncios as $anuncio) { mostrar_card($anuncio); } ?>
-
-            </div>
-
-        <?php else: ?>
-
-            <div class="alert alert-light border">
-
-                Ainda não existem serviços de faxina publicados.
-
-            </div>
-
-        <?php endif; ?>
-
-    <?php endif; ?>
-
-</div>
-
-<script>
-
-const campoBairro = document.getElementById("campoBairro");
-
-const bairroOficial = document.getElementById("bairroOficial");
-
-const sugestoes = document.getElementById("sugestoesBairro");
-
-const formPesquisa = document.getElementById("formPesquisa");
-
-let timerBairro = null;
-
-function carregarSugestoes() {
-
-    const texto = campoBairro.value.trim();
-
-    bairroOficial.value = "";
-
-    clearTimeout(timerBairro);
-
-    if (texto.length < 2) {
-
-        sugestoes.innerHTML = "";
-
-        sugestoes.style.display = "none";
-
-        return;
-
-    }
-
-    timerBairro = setTimeout(async () => {
-
-        try {
-
-            const resposta = await fetch(
-
-                "profissionais.php?acao=buscar_bairro&termo=" +
-
-                encodeURIComponent(texto)
-
-            );
-
-            const dados = await resposta.json();
-
-            sugestoes.innerHTML = "";
-
-            if (!dados.length) {
-
-                sugestoes.innerHTML =
-
-                    '<div class="p-3 text-muted">Nenhum bairro encontrado.</div>';
-
-                sugestoes.style.display = "block";
-
-                return;
-
-            }
-
-            dados.forEach((bairro) => {
-
-                const botao = document.createElement("button");
-
-                botao.type = "button";
-
-                botao.className = "item-sugestao";
-
-                botao.innerHTML =
-
-                    '<div class="nome-curto">📍 ' +
-
-                    escapeHtml(bairro.nome) +
-
-                    '</div>' +
-
-                    '<div class="nome-oficial">' +
-
-                    escapeHtml(bairro.oficial) +
-
-                    '</div>';
-
-                botao.addEventListener("click", () => {
-
-                    campoBairro.value = bairro.nome;
-
-                    bairroOficial.value = bairro.oficial;
-
-                    sugestoes.innerHTML = "";
-
-                    sugestoes.style.display = "none";
-
-                });
-
-                sugestoes.appendChild(botao);
-
-            });
-
-            sugestoes.style.display = "block";
-
-        } catch (erro) {
-
-            sugestoes.style.display = "none";
-
-        }
-
-    }, 180);
-
-}
-
-function escapeHtml(texto) {
-
-    const div = document.createElement("div");
-
-    div.textContent = texto;
-
-    return div.innerHTML;
-
-}
-
-campoBairro.addEventListener("input", carregarSugestoes);
-
-document.addEventListener("click", (evento) => {
-
-    if (!evento.target.closest(".campo-bairro")) {
-
-        sugestoes.style.display = "none";
-
-    }
-
-});
-
-formPesquisa.addEventListener("submit", (evento) => {
-
-    if (campoBairro.value.trim() !== "" && bairroOficial.value.trim() === "") {
-
-        evento.preventDefault();
-
-        alert("Escolha um bairro na sugestão para confirmar o nome oficial.");
-
-        campoBairro.focus();
-
-    }
-
-});
-
-const cepPesquisa = document.getElementById("cepPesquisa");
-
-const btnCep = document.getElementById("btnCep");
-
-const statusCep = document.getElementById("statusCep");
-
-cepPesquisa.addEventListener("input", () => {
-
-    let valor = cepPesquisa.value.replace(/\D/g, "").slice(0, 8);
-
-    if (valor.length > 5) {
-
-        valor = valor.substring(0, 5) + "-" + valor.substring(5);
-
-    }
-
-    cepPesquisa.value = valor;
-
-});
-
-btnCep.addEventListener("click", async () => {
-
-    const cep = cepPesquisa.value.replace(/\D/g, "");
-
-    if (cep.length !== 8) {
-
-        statusCep.textContent = "Digite um CEP válido com 8 números.";
-
-        return;
-
-    }
-
-    statusCep.textContent = "Consultando CEP...";
+// =====================================================
+// LISTAR TODOS OS ANÚNCIOS ATIVOS
+// =====================================================
+
+if ($conexao_ok) {
 
     try {
 
-        const resposta = await fetch(
+        $sql = "
+            SELECT
+                A.ID_ANUNCIO,
+                A.ID_USUARIO,
+                A.DESCRICAO,
+                A.PRECO,
+                A.FOTO,
 
-            "https://viacep.com.br/ws/" + cep + "/json/"
+                U.NOME,
+                U.FOTO AS FOTO_USUARIO,
 
+                (
+                    SELECT AVG(V.NOTA)
+                    FROM AVALIACAO V
+                    WHERE V.ID_AVALIADO = A.ID_USUARIO
+                ) AS MEDIA,
+
+                (
+                    SELECT COUNT(*)
+                    FROM AVALIACAO V
+                    WHERE V.ID_AVALIADO = A.ID_USUARIO
+                ) AS TOTAL
+
+            FROM ANUNCIO A
+
+            INNER JOIN USUARIO U
+                ON U.ID_USUARIO = A.ID_USUARIO
+
+            WHERE A.STATUS = ?
+              AND U.ATIVO = ?
+
+            ORDER BY A.DATA_CADASTRO DESC
+        ";
+
+        $status_ativo = "ATIVO";
+        $usuario_ativo = 1;
+
+        $stmt = mysqli_prepare(
+            $conexao,
+            $sql
         );
 
-        const dados = await resposta.json();
+        mysqli_stmt_bind_param(
+            $stmt,
+            "si",
+            $status_ativo,
+            $usuario_ativo
+        );
 
-        if (dados.erro) {
+        mysqli_stmt_execute($stmt);
 
-            statusCep.textContent = "CEP não encontrado.";
+        $resultado = mysqli_stmt_get_result($stmt);
 
-            return;
+        $anuncios = mysqli_fetch_all(
+            $resultado,
+            MYSQLI_ASSOC
+        );
 
-        }
+        mysqli_stmt_close($stmt);
 
-        if (
+    } catch (Throwable $erro) {
 
-            (dados.localidade || "").toLowerCase() !== "bauru" ||
+        error_log(
+            "LimpaLar - anúncios: " . $erro->getMessage()
+        );
 
-            (dados.uf || "").toUpperCase() !== "SP"
-
-        ) {
-
-            statusCep.textContent = "Esse CEP não é de Bauru/SP.";
-
-            return;
-
-        }
-
-        campoBairro.value = dados.bairro || "";
-
-        bairroOficial.value = "";
-
-        if (dados.bairro) {
-
-            const respostaBairro = await fetch(
-
-                "profissionais.php?acao=buscar_bairro&termo=" +
-
-                encodeURIComponent(dados.bairro)
-
-            );
-
-            const bairros = await respostaBairro.json();
-
-            if (bairros.length > 0) {
-
-                bairroOficial.value = bairros[0].oficial;
-
-                campoBairro.value = bairros[0].nome;
-
-                statusCep.textContent =
-
-                    "Bairro encontrado: " + bairros[0].oficial;
-
-            } else {
-
-                statusCep.textContent =
-
-                    "O CEP encontrou '" + dados.bairro +
-
-                    "', mas esse bairro não foi localizado na lista.";
-
-            }
-
-        }
-
-    } catch (erro) {
-
-        statusCep.textContent = "Não foi possível consultar o CEP agora.";
-
+        $erro_consulta =
+            "Não foi possível consultar os anúncios. " .
+            "Confira as tabelas ANUNCIO, USUARIO e AVALIACAO.";
     }
+}
 
-});
+$id_usuario_logado = (int)(
+    $_SESSION["ID_USUARIO"] ?? 0
+);
 
-</script>
-
-
-<!-- MODAL: PERFIL E AGENDA DO PROFISSIONAL -->
-<div class="modal fade" id="modalSolicitar" tabindex="-1"
-     aria-labelledby="tituloModalProfissional" aria-hidden="true">
-
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content limpa-modal">
-
-            <div class="modal-header">
-                <div>
-                    <h5 class="modal-title" id="tituloModalProfissional">
-                        Conheça o profissional
-                    </h5>
-                    <small class="text-muted">
-                        Confira as informações e os horários disponíveis.
-                    </small>
-                </div>
-
-                <button type="button" class="btn-close"
-                        data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-
-            <div class="modal-body">
-                <div class="row g-4">
-
-                    <!-- LADO ESQUERDO: FOTO E PERFIL -->
-                    <div class="col-12 col-md-4">
-                        <div class="perfil-profissional">
-                            <img id="modalFotoProfissional"
-                                 src=""
-                                 alt="Foto do profissional"
-                                 class="foto-profissional-modal"
-                                 hidden>
-
-                            <div id="modalFotoPlaceholder"
-                                 class="foto-placeholder">
-                                <span>👤</span>
-                            </div>
-
-                            <h4 id="modalNomeProfissional" class="mt-3">
-                                Profissional
-                            </h4>
-
-                            <p class="text-muted mb-2">
-                                <span>📍</span>
-                                <span id="modalBairroProfissional">
-                                    Local não informado
-                                </span>
-                            </p>
-
-                            <div class="preco-profissional">
-                                <small>Valor anunciado</small>
-                                <h4 id="modalPrecoProfissional">
-                                    A combinar
-                                </h4>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- CENTRO: DESCRIÇÃO -->
-                    <div class="col-12 col-md-4">
-                        <h5 class="titulo-secao-modal">Sobre o profissional</h5>
-
-                        <p id="modalDescricaoProfissional"
-                           class="descricao-profissional">
-                            Nenhuma descrição informada.
-                        </p>
-
-                        <div class="aviso-agenda">
-                            <strong>Antes de solicitar</strong>
-                            <p class="mb-0">
-                                Selecione uma data e um horário disponíveis.
-                                A solicitação deverá ser confirmada pelo sistema.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- LADO DIREITO: CALENDÁRIO E HORÁRIOS -->
-                    <div class="col-12 col-md-4">
-                        <h5 class="titulo-secao-modal">Agenda</h5>
-
-                        <label for="dataServico" class="form-label">
-                            Escolha o dia
-                        </label>
-
-                        <input type="date"
-                               id="dataServico"
-                               class="form-control"
-                               min="<?= date('Y-m-d'); ?>">
-
-                        <label for="horarioServico" class="form-label mt-3">
-                            Horário disponível
-                        </label>
-
-                        <select id="horarioServico" class="form-select">
-                            <option value="">Escolha primeiro uma data</option>
-                        </select>
-
-                        <div id="mensagemAgenda"
-                             class="small text-muted mt-3"
-                             aria-live="polite">
-                            Selecione uma data para consultar os horários.
-                        </div>
-
-                        <button type="button"
-                                id="btnSolicitarServico"
-                                class="btn btn-primary w-100 mt-4">
-                            Solicitar serviço
-                        </button>
-
-                        <p class="small text-muted mt-2 mb-0">
-                            A escolha do horário não garante a reserva até a
-                            solicitação ser registrada e confirmada.
-                        </p>
-                    </div>
-
-                </div>
-            </div>
-
-        </div>
-    </div>
-</div>
+include __DIR__ . "/cabecalho.php";
+?>
 
 <style>
-    .limpa-modal {
+    /* =====================================================
+       VISUAL DA TELA DOS PROFISSIONAIS
+    ===================================================== */
+
+    .prof-titulo {
+        color: #126E68;
+        font-weight: 700;
+    }
+
+    .prof-texto {
+        color: #617477;
+    }
+
+    .prof-card {
+        border: 0;
+        border-radius: 18px;
+        overflow: hidden;
+        transition: transform .2s, box-shadow .2s;
+    }
+
+    .prof-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(18,110,104,.13) !important;
+    }
+
+    .prof-foto,
+    .prof-sem-foto {
+        width: 100%;
+        height: 205px;
+    }
+
+    .prof-foto {
+        object-fit: cover;
+    }
+
+    .prof-sem-foto {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #E7F5F1;
+        font-size: 65px;
+    }
+
+    .prof-descricao {
+        color: #617477;
+        line-height: 1.55;
+        overflow-wrap: anywhere;
+    }
+
+    .prof-preco {
+        color: #126E68;
+        font-weight: 700;
+        font-size: 19px;
+    }
+
+    .btn-limpalar {
+        background: #18A999;
+        border-color: #18A999;
+        color: white;
+    }
+
+    .btn-limpalar:hover,
+    .btn-limpalar:focus {
+        background: #126E68;
+        border-color: #126E68;
+        color: white;
+    }
+
+    /* =====================================================
+       MODAL
+    ===================================================== */
+
+    .prof-modal .modal-header {
+        background: #E7F5F1;
+    }
+
+    .prof-modal .modal-content {
         border: 0;
         border-radius: 18px;
         overflow: hidden;
     }
 
-    .limpa-modal .modal-header {
-        background: #E7F5F1;
-        border-bottom: 1px solid #D5E5E1;
-        padding: 22px;
-    }
-
-    .limpa-modal .modal-body {
-        padding: 24px;
-    }
-
-    .perfil-profissional {
-        text-align: center;
-        padding: 20px 14px;
-        background: #F4F9F7;
-        border-radius: 14px;
-        height: 100%;
-    }
-
-    .foto-profissional-modal {
-        width: 150px;
-        height: 150px;
+    .prof-modal-foto {
+        width: 100%;
+        height: 220px;
         object-fit: cover;
-        border-radius: 50%;
-        border: 4px solid #18A999;
-    }
-
-    .foto-placeholder {
-        width: 150px;
-        height: 150px;
-        margin: auto;
-        border-radius: 50%;
-        background: #D5E5E1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 55px;
-    }
-
-    .foto-placeholder[hidden],
-    .foto-profissional-modal[hidden] {
-        display: none !important;
-    }
-
-    .preco-profissional {
-        margin-top: 22px;
-        padding: 14px;
-        background: white;
         border-radius: 12px;
     }
 
-    .preco-profissional small {
-        color: #617477;
+    .prof-modal-placeholder {
+        height: 220px;
+        background: #E7F5F1;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 65px;
     }
 
-    .preco-profissional h4 {
-        color: #126E68;
-        font-weight: 700;
-        margin: 5px 0 0;
-    }
-
-    .titulo-secao-modal {
-        color: #126E68;
-        font-weight: 700;
-        margin-bottom: 16px;
-    }
-
-    .descricao-profissional {
-        color: #243438;
-        line-height: 1.7;
+    .prof-modal-descricao {
         white-space: pre-line;
         overflow-wrap: anywhere;
     }
 
-    .aviso-agenda {
-        padding: 14px;
-        border-radius: 10px;
-        background: #E7F5F1;
+    .prof-modal label {
         color: #243438;
-        font-size: 14px;
-    }
-
-    .aviso-agenda strong {
-        display: block;
-        color: #126E68;
-        margin-bottom: 6px;
-    }
-
-    #dataServico,
-    #horarioServico {
-        min-height: 45px;
-    }
-
-    #btnSolicitarServico {
-        background: #18A999;
-        border-color: #18A999;
-        padding: 12px;
         font-weight: 600;
     }
 
-    #btnSolicitarServico:hover {
-        background: #0F857C;
-        border-color: #0F857C;
-    }
-
-    @media (max-width: 767px) {
-        .limpa-modal .modal-body {
-            padding: 16px;
-        }
-
-        .foto-profissional-modal,
-        .foto-placeholder {
-            width: 120px;
-            height: 120px;
-        }
+    .prof-modal .form-control:focus,
+    .prof-modal .form-select:focus {
+        border-color: #18A999;
+        box-shadow: 0 0 0 .2rem rgba(24,169,153,.15);
     }
 </style>
 
+<!-- =====================================================
+     LISTA DE PROFISSIONAIS DE BAURU
+====================================================== -->
+
+<section class="container py-5">
+
+    <div class="text-center mb-5">
+
+        <h1 class="prof-titulo">
+            🧹 Profissionais de limpeza
+        </h1>
+
+        <p class="prof-texto mb-0">
+            Encontre profissionais que atendem toda Bauru - SP.
+        </p>
+
+    </div>
+
+    <?php if ($erro_consulta !== ""): ?>
+
+        <div class="alert alert-danger" role="alert">
+            <?= escapar($erro_consulta); ?>
+        </div>
+
+    <?php elseif (empty($anuncios)): ?>
+
+        <div class="alert alert-light border text-center">
+            Ainda não existem anúncios ativos de profissionais.
+        </div>
+
+    <?php else: ?>
+
+        <div class="row g-4">
+
+            <?php foreach ($anuncios as $anuncio): ?>
+
+                <?php
+
+                // =================================================
+                // FOTO, DESCRIÇÃO, PREÇO E AVALIAÇÕES
+                // =================================================
+
+                $foto = trim((string)(
+                    $anuncio["FOTO_USUARIO"]
+                    ?: $anuncio["FOTO"]
+                    ?: ""
+                ));
+
+                $foto_valida = $foto !== ""
+                    && is_file(__DIR__ . "/" . $foto);
+
+                $descricao = (string)(
+                    $anuncio["DESCRICAO"] ?? ""
+                );
+
+                $tamanho = function_exists("mb_strlen")
+                    ? mb_strlen($descricao, "UTF-8")
+                    : strlen($descricao);
+
+                $descricao_curta = $tamanho > 140
+                    ? (
+                        function_exists("mb_substr")
+                        ? mb_substr($descricao, 0, 140, "UTF-8")
+                        : substr($descricao, 0, 140)
+                    ) . "..."
+                    : $descricao;
+
+                $tem_preco = $anuncio["PRECO"] !== null
+                    && $anuncio["PRECO"] !== "";
+
+                $preco = $tem_preco
+                    ? "A partir de R$ " .
+                        number_format(
+                            (float)$anuncio["PRECO"],
+                            2,
+                            ",",
+                            "."
+                        )
+                    : "Preço a combinar";
+
+                $media = (float)(
+                    $anuncio["MEDIA"] ?? 0
+                );
+
+                $total = (int)(
+                    $anuncio["TOTAL"] ?? 0
+                );
+
+                ?>
+
+                <div class="col-12 col-md-6 col-lg-4">
+
+                    <article class="card prof-card shadow-sm h-100">
+
+                        <?php if ($foto_valida): ?>
+
+                            <img
+                                src="<?= escapar($foto); ?>"
+                                class="prof-foto"
+                                alt="Foto do profissional">
+
+                        <?php else: ?>
+
+                            <div class="prof-sem-foto">
+                                🧹
+                            </div>
+
+                        <?php endif; ?>
+
+                        <div class="card-body p-4 d-flex flex-column">
+
+                            <h2 class="h5 prof-titulo mb-2">
+                                <?= escapar($anuncio["NOME"]); ?>
+                            </h2>
+
+                            <p class="small prof-texto mb-3">
+                                📍 Atende toda Bauru
+                            </p>
+
+                            <p class="prof-descricao mb-3">
+                                <?= nl2br(escapar($descricao_curta)); ?>
+                            </p>
+
+                            <!-- AVALIAÇÕES -->
+
+                            <div class="mb-3">
+
+                                <?php if ($total > 0): ?>
+
+                                    <?= exibir_estrelas($media); ?>
+
+                                    <span class="small prof-texto ms-1">
+
+                                        <?= escapar(
+                                            number_format($media, 1, ",", ".")
+                                        ); ?>
+
+                                        (<?= $total; ?> avaliações)
+
+                                    </span>
+
+                                <?php else: ?>
+
+                                    <span class="small prof-texto">
+                                        Ainda sem avaliações
+                                    </span>
+
+                                <?php endif; ?>
+
+                            </div>
+
+                            <!-- PREÇO -->
+
+                            <div class="prof-preco mt-auto mb-3">
+                                <?= escapar($preco); ?>
+                            </div>
+
+                            <!-- VER PROFISSIONAL -->
+
+                            <button
+                                type="button"
+                                class="btn btn-limpalar w-100 py-2"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalSolicitar"
+
+                                data-id-anuncio="<?= (int)$anuncio["ID_ANUNCIO"]; ?>"
+                                data-id-usuario="<?= (int)$anuncio["ID_USUARIO"]; ?>"
+
+                                data-nome="<?= escapar($anuncio["NOME"]); ?>"
+                                data-descricao="<?= escapar($descricao); ?>"
+                                data-preco="<?= escapar($preco); ?>"
+
+                                data-foto="<?= $foto_valida ? escapar($foto) : ""; ?>"
+
+                                data-media="<?= escapar(
+                                    number_format($media, 1, ".", "")
+                                ); ?>"
+
+                                data-total="<?= $total; ?>">
+
+                                Ver profissional
+
+                            </button>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            <?php endforeach; ?>
+
+        </div>
+
+    <?php endif; ?>
+
+</section>
+
+<!-- =====================================================
+     MODAL DO PROFISSIONAL
+====================================================== -->
+
+<div
+    class="modal fade prof-modal"
+    id="modalSolicitar"
+    tabindex="-1"
+    aria-labelledby="tituloModalProfissional"
+    aria-hidden="true">
+
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+
+        <div class="modal-content">
+
+            <div class="modal-header px-4 py-3">
+
+                <h2
+                    class="modal-title h5 prof-titulo"
+                    id="tituloModalProfissional">
+
+                    Conheça o profissional
+
+                </h2>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Fechar">
+                </button>
+
+            </div>
+
+            <div class="modal-body p-4">
+
+                <div class="row g-4">
+
+                    <!-- PERFIL -->
+
+                    <div class="col-12 col-lg-4">
+
+                        <img
+                            id="modalFotoProfissional"
+                            class="prof-modal-foto mb-3"
+                            alt="Foto do profissional"
+                            hidden>
+
+                        <div
+                            id="modalFotoPlaceholder"
+                            class="prof-modal-placeholder mb-3">
+
+                            🧹
+
+                        </div>
+
+                        <h3
+                            class="h4 prof-titulo"
+                            id="modalNomeProfissional">
+
+                            Profissional
+
+                        </h3>
+
+                        <p class="prof-texto mb-2">
+                            📍 Atende toda Bauru
+                        </p>
+
+                        <div
+                            id="modalAvaliacao"
+                            class="mb-3 prof-texto">
+                        </div>
+
+                        <div
+                            class="prof-preco"
+                            id="modalPrecoProfissional">
+
+                            Preço a combinar
+
+                        </div>
+
+                    </div>
+
+                    <!-- DESCRIÇÃO -->
+
+                    <div class="col-12 col-lg-4">
+
+                        <h3 class="h5 prof-titulo">
+                            Sobre o profissional
+                        </h3>
+
+                        <p
+                            id="modalDescricaoProfissional"
+                            class="prof-texto prof-modal-descricao">
+
+                            Sem descrição.
+
+                        </p>
+
+                        <div
+                            class="p-3 rounded-3"
+                            style="background:#E7F5F1;color:#243438">
+
+                            O LimpaLar conecta você ao profissional.
+                            A solicitação precisa ser aceita por ele.
+
+                        </div>
+
+                    </div>
+
+                    <!-- AGENDAMENTO -->
+
+                    <div class="col-12 col-lg-4">
+
+                        <h3 class="h5 prof-titulo mb-3">
+                            Solicitar faxina
+                        </h3>
+
+                        <div
+                            id="avisoUsuario"
+                            class="alert alert-warning"
+                            hidden>
+                        </div>
+
+                        <form id="formSolicitarServico">
+
+                            <div class="mb-3">
+
+                                <label
+                                    for="dataServico"
+                                    class="form-label">
+
+                                    Data da faxina
+
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="dataServico"
+                                    class="form-control"
+                                    required>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label
+                                    for="horarioServico"
+                                    class="form-label">
+
+                                    Horário disponível
+
+                                </label>
+
+                                <select
+                                    id="horarioServico"
+                                    class="form-select"
+                                    required>
+
+                                    <option value="">
+                                        Escolha primeiro uma data
+                                    </option>
+
+                                </select>
+
+                                <div
+                                    id="mensagemAgenda"
+                                    class="small prof-texto mt-2"
+                                    aria-live="polite">
+                                </div>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label
+                                    for="enderecoServico"
+                                    class="form-label">
+
+                                    Endereço da faxina
+
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="enderecoServico"
+                                    class="form-control"
+                                    maxlength="255"
+                                    placeholder="Rua ou avenida"
+                                    required>
+
+                            </div>
+
+                            <div class="row g-2 mb-3">
+
+                                <div class="col-4">
+
+                                    <label
+                                        for="numeroServico"
+                                        class="form-label">
+
+                                        Número
+
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="numeroServico"
+                                        class="form-control"
+                                        maxlength="20"
+                                        required>
+
+                                </div>
+
+                                <div class="col-8">
+
+                                    <label
+                                        for="bairroServico"
+                                        class="form-label">
+
+                                        Bairro da faxina
+
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="bairroServico"
+                                        class="form-control"
+                                        maxlength="100"
+                                        placeholder="Bairro do cliente">
+
+                                </div>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label
+                                    for="observacaoServico"
+                                    class="form-label">
+
+                                    Observação (opcional)
+
+                                </label>
+
+                                <textarea
+                                    id="observacaoServico"
+                                    class="form-control"
+                                    rows="2"
+                                    maxlength="1000"></textarea>
+
+                            </div>
+
+                            <div
+                                id="mensagemSolicitacao"
+                                class="mb-3"
+                                aria-live="polite">
+                            </div>
+
+                            <button
+                                type="submit"
+                                id="btnSolicitarServico"
+                                class="btn btn-limpalar w-100 py-2">
+
+                                Solicitar serviço
+
+                            </button>
+
+                        </form>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
 
 <script>
+// =====================================================
+// MODAL DO PROFISSIONAL E AGENDA
+// =====================================================
+
 document.addEventListener('DOMContentLoaded', function () {
+
     const modal = document.getElementById('modalSolicitar');
 
     if (!modal) return;
+
+    const idUsuarioLogado = <?= $id_usuario_logado; ?>;
 
     const foto = document.getElementById('modalFotoProfissional');
     const placeholder = document.getElementById('modalFotoPlaceholder');
     const nome = document.getElementById('modalNomeProfissional');
     const descricao = document.getElementById('modalDescricaoProfissional');
-    const bairro = document.getElementById('modalBairroProfissional');
     const preco = document.getElementById('modalPrecoProfissional');
+    const avaliacao = document.getElementById('modalAvaliacao');
+
     const data = document.getElementById('dataServico');
     const horario = document.getElementById('horarioServico');
-    const mensagem = document.getElementById('mensagemAgenda');
+
+    const mensagemAgenda = document.getElementById('mensagemAgenda');
+    const mensagemSolicitacao = document.getElementById('mensagemSolicitacao');
+    const avisoUsuario = document.getElementById('avisoUsuario');
+
+    const formulario = document.getElementById('formSolicitarServico');
     const botaoSolicitar = document.getElementById('btnSolicitarServico');
 
-    let idUsuarioAtual = null;
-    let agendaAtual = [];
+    const diasSemana = [
+        'DOMINGO',
+        'SEGUNDA',
+        'TERCA',
+        'QUARTA',
+        'QUINTA',
+        'SEXTA',
+        'SABADO'
+    ];
 
-    const diasSemana = {
-        DOMINGO: 0,
-        SEGUNDA: 1,
-        TERCA: 2,
-        QUARTA: 3,
-        QUINTA: 4,
-        SEXTA: 5,
-        SABADO: 6
-    };
+    let idUsuarioAtual = 0;
+    let idAnuncioAtual = 0;
 
-    function limparHorarios(texto) {
-        horario.innerHTML = '';
+    let horariosDisponiveis = [];
+    let horariosOcupados = [];
 
-        const opcao = document.createElement('option');
-        opcao.value = '';
-        opcao.textContent = texto;
+    let agendaCarregada = false;
+    let bloqueado = false;
 
-        horario.appendChild(opcao);
-    }
+    // =====================================================
+    // DATA LOCAL
+    // =====================================================
 
     function dataLocalISO() {
+
         const agora = new Date();
+
         const ano = agora.getFullYear();
-        const mes = String(agora.getMonth() + 1).padStart(2, '0');
-        const dia = String(agora.getDate()).padStart(2, '0');
+
+        const mes = String(
+            agora.getMonth() + 1
+        ).padStart(2, '0');
+
+        const dia = String(
+            agora.getDate()
+        ).padStart(2, '0');
 
         return `${ano}-${mes}-${dia}`;
     }
 
-    function diaSemanaDaData(valor) {
-        const partes = valor.split('-').map(Number);
-        const dataEscolhida = new Date(
-            partes[0],
-            partes[1] - 1,
-            partes[2]
-        );
+    // =====================================================
+    // LIMPAR HORÁRIOS
+    // =====================================================
 
-        return dataEscolhida.getDay();
+    function limparHorarios(texto) {
+
+        horario.replaceChildren(
+            new Option(texto, '')
+        );
     }
 
-    function montarOpcoesDeHorario() {
+    // =====================================================
+    // MOSTRAR MENSAGENS NO MODAL
+    // =====================================================
+
+    function mostrarMensagem(texto, tipo = 'danger') {
+
+        mensagemSolicitacao.textContent = texto;
+
+        mensagemSolicitacao.className =
+            `alert alert-${tipo} mb-3`;
+    }
+
+    // =====================================================
+    // MONTAR HORÁRIOS DISPONÍVEIS
+    // =====================================================
+
+    function horariosDaData() {
+
         limparHorarios('Selecione um horário');
 
-        const dataEscolhida = data.value;
+        const valorData = data.value;
 
-        if (!dataEscolhida) {
-            mensagem.textContent = 'Selecione uma data para consultar os horários.';
+        if (!valorData || !agendaCarregada) {
             return;
         }
 
-        if (dataEscolhida < dataLocalISO()) {
-            mensagem.textContent = 'Escolha uma data de hoje em diante.';
-            limparHorarios('Data inválida');
+        if (valorData < dataLocalISO()) {
+
+            mensagemAgenda.textContent =
+                'Selecione uma data de hoje em diante.';
+
             return;
         }
 
-        const dia = diaSemanaDaData(dataEscolhida);
+        const partes = valorData
+            .split('-')
+            .map(Number);
 
-        const disponibilidadeDoDia = agendaAtual.filter(function (item) {
-            return diasSemana[item.DIA_SEMANA] === dia;
-        });
+        const diaSemana = diasSemana[
+            new Date(
+                partes[0],
+                partes[1] - 1,
+                partes[2]
+            ).getDay()
+        ];
 
-        if (disponibilidadeDoDia.length === 0) {
-            mensagem.textContent =
-                'Este profissional não informou disponibilidade para esse dia.';
+        const agora = new Date();
 
-            limparHorarios('Sem horários disponíveis');
-            return;
-        }
+        const minutosAgora =
+            agora.getHours() * 60 +
+            agora.getMinutes();
 
-        let quantidade = 0;
+        const opcoes = new Set();
 
-        disponibilidadeDoDia.forEach(function (item) {
-            const inicio = item.HORA_INICIO.substring(0, 5);
-            const fim = item.HORA_FIM.substring(0, 5);
+        horariosDisponiveis.forEach(item => {
 
-            const partesInicio = inicio.split(':').map(Number);
-            const partesFim = fim.split(':').map(Number);
+            if (item.DIA_SEMANA !== diaSemana) {
+                return;
+            }
 
-            let minutos = partesInicio[0] * 60 + partesInicio[1];
-            const fimMinutos = partesFim[0] * 60 + partesFim[1];
+            const [hi, mi] = item.HORA_INICIO
+                .substring(0, 5)
+                .split(':')
+                .map(Number);
 
-            // Exibe opções em intervalos de 1 hora.
-            while (minutos < fimMinutos) {
-                const hora = String(Math.floor(minutos / 60)).padStart(2, '0');
-                const minuto = String(minutos % 60).padStart(2, '0');
-                const valor = `${hora}:${minuto}`;
+            const [hf, mf] = item.HORA_FIM
+                .substring(0, 5)
+                .split(':')
+                .map(Number);
 
-                const opcao = document.createElement('option');
-                opcao.value = valor;
-                opcao.textContent = valor;
+            const fim = hf * 60 + mf;
 
-                horario.appendChild(opcao);
-                quantidade++;
+            // Intervalos de uma hora.
+            for (
+                let minuto = hi * 60 + mi;
+                minuto + 60 <= fim;
+                minuto += 60
+            ) {
 
-                minutos += 60;
+                // Não mostra horários que já passaram hoje.
+                if (
+                    valorData === dataLocalISO() &&
+                    minuto <= minutosAgora
+                ) {
+                    continue;
+                }
+
+                const valor =
+                    String(
+                        Math.floor(minuto / 60)
+                    ).padStart(2, '0') +
+                    ':' +
+                    String(
+                        minuto % 60
+                    ).padStart(2, '0');
+
+                // Não mostra horários já solicitados ou aceitos.
+                const ocupado = horariosOcupados.some(
+                    itemOcupado =>
+
+                        itemOcupado.DATA_SERVICO === valorData &&
+
+                        String(
+                            itemOcupado.HORA_SERVICO
+                        ).substring(0, 5) === valor
+                );
+
+                if (!ocupado) {
+                    opcoes.add(valor);
+                }
             }
         });
 
-        if (quantidade === 0) {
-            mensagem.textContent =
-                'Não há horários disponíveis para essa data.';
-            limparHorarios('Sem horários disponíveis');
-            return;
-        }
+        [...opcoes]
+            .sort()
+            .forEach(valor => {
 
-        mensagem.textContent = 'Escolha um dos horários apresentados.';
+                horario.add(
+                    new Option(valor, valor)
+                );
+            });
+
+        if (opcoes.size === 0) {
+
+            limparHorarios('Sem horários disponíveis');
+
+            mensagemAgenda.textContent =
+                'Não há horários livres para essa data.';
+
+        } else {
+
+            mensagemAgenda.textContent =
+                'Escolha um dos horários disponíveis.';
+        }
     }
 
-    modal.addEventListener('show.bs.modal', async function (evento) {
-        const botao = evento.relatedTarget;
+    // =====================================================
+    // ABRIR MODAL E CARREGAR PROFISSIONAL
+    // =====================================================
 
-        if (!botao) return;
+    modal.addEventListener(
+        'show.bs.modal',
+        async function (evento) {
 
-        idUsuarioAtual = botao.dataset.idUsuario;
-        agendaAtual = [];
+            const botao = evento.relatedTarget;
 
-        nome.textContent = botao.dataset.nome || 'Profissional';
-        descricao.textContent =
-            botao.dataset.descricao || 'Nenhuma descrição informada.';
-        bairro.textContent =
-            botao.dataset.bairro || 'Local não informado';
-        preco.textContent = botao.dataset.preco || 'A combinar';
+            if (!botao) return;
 
-        const caminhoFoto = botao.dataset.foto || '';
+            formulario.reset();
 
-        if (caminhoFoto) {
-            foto.src = caminhoFoto;
-            foto.hidden = false;
-            placeholder.hidden = true;
+            mensagemSolicitacao.className = 'mb-3';
+            mensagemSolicitacao.textContent = '';
 
-            foto.onerror = function () {
-                foto.hidden = true;
-                placeholder.hidden = false;
-            };
-        } else {
-            foto.removeAttribute('src');
-            foto.hidden = true;
-            placeholder.hidden = false;
-        }
-
-        data.value = '';
-        data.min = dataLocalISO();
-
-        limparHorarios('Escolha primeiro uma data');
-        mensagem.textContent = 'Carregando disponibilidade...';
-
-        try {
-            const resposta = await fetch(
-                'profissionais.php?acao=disponibilidade&id_usuario=' +
-                encodeURIComponent(idUsuarioAtual),
-                {
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                }
+            idAnuncioAtual = Number(
+                botao.dataset.idAnuncio || 0
             );
 
-            const resultado = await resposta.json();
+            idUsuarioAtual = Number(
+                botao.dataset.idUsuario || 0
+            );
 
-            if (!resposta.ok || !resultado.sucesso) {
-                throw new Error(
-                    resultado.mensagem || 'Erro ao consultar agenda.'
-                );
-            }
+            horariosDisponiveis = [];
+            horariosOcupados = [];
+            agendaCarregada = false;
 
-            agendaAtual = resultado.horarios || [];
+            data.min = dataLocalISO();
 
-            if (agendaAtual.length === 0) {
-                mensagem.textContent =
-                    'Este profissional ainda não cadastrou seus horários.';
+            limparHorarios(
+                'Escolha primeiro uma data'
+            );
+
+            nome.textContent =
+                botao.dataset.nome || 'Profissional';
+
+            descricao.textContent =
+                botao.dataset.descricao ||
+                'Nenhuma descrição informada.';
+
+            preco.textContent =
+                botao.dataset.preco ||
+                'Preço a combinar';
+
+            // =================================================
+            // AVALIAÇÕES DO PROFISSIONAL
+            // =================================================
+
+            const total = Number(
+                botao.dataset.total || 0
+            );
+
+            const media = Number(
+                botao.dataset.media || 0
+            );
+
+            avaliacao.textContent = total > 0
+                ? '★'.repeat(Math.round(media)) +
+                    '☆'.repeat(5 - Math.round(media)) +
+                    '  ' +
+                    media.toFixed(1).replace('.', ',') +
+                    ` (${total} avaliações)`
+                : 'Ainda sem avaliações';
+
+            // =================================================
+            // FOTO DO PROFISSIONAL
+            // =================================================
+
+            const caminhoFoto =
+                botao.dataset.foto || '';
+
+            foto.hidden = !caminhoFoto;
+            placeholder.hidden = !!caminhoFoto;
+
+            if (caminhoFoto) {
+
+                foto.src = caminhoFoto;
+
+                foto.onerror = () => {
+
+                    foto.hidden = true;
+                    placeholder.hidden = false;
+                };
+
             } else {
-                mensagem.textContent =
-                    'Disponibilidade carregada. Escolha uma data.';
+
+                foto.removeAttribute('src');
             }
-        } catch (erro) {
-            agendaAtual = [];
-            mensagem.textContent =
-                'Não foi possível carregar a agenda. Tente novamente.';
-            console.error(erro);
+
+            // =================================================
+            // VERIFICAR LOGIN E PRÓPRIO ANÚNCIO
+            // =================================================
+
+            bloqueado =
+                idUsuarioLogado === 0 ||
+                idUsuarioLogado === idUsuarioAtual;
+
+            avisoUsuario.hidden = !bloqueado;
+            avisoUsuario.replaceChildren();
+
+            if (idUsuarioLogado === 0) {
+
+                avisoUsuario.append(
+                    'Para solicitar uma faxina, '
+                );
+
+                const link = document.createElement('a');
+
+                link.href = 'entrar.php';
+
+                link.textContent = 'entre na sua conta';
+
+                avisoUsuario.appendChild(link);
+                avisoUsuario.append('.');
+
+            } else if (bloqueado) {
+
+                avisoUsuario.textContent =
+                    'Você não pode contratar seu próprio anúncio.';
+            }
+
+            botaoSolicitar.disabled = bloqueado;
+
+            mensagemAgenda.textContent =
+                'Carregando a agenda...';
+
+            // =================================================
+            // CONSULTAR DISPONIBILIDADE
+            // =================================================
+
+            try {
+
+                const resposta = await fetch(
+                    'profissionais.php?acao=disponibilidade&id_usuario=' +
+                    encodeURIComponent(idUsuarioAtual),
+                    {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+
+                const dados = await resposta.json();
+
+                if (!resposta.ok || !dados.sucesso) {
+
+                    throw new Error(
+                        dados.mensagem ||
+                        'Não foi possível consultar a agenda.'
+                    );
+                }
+
+                horariosDisponiveis = dados.horarios || [];
+                horariosOcupados = dados.ocupados || [];
+
+                agendaCarregada = true;
+
+                mensagemAgenda.textContent =
+                    horariosDisponiveis.length
+                        ? 'Escolha a data para visualizar os horários.'
+                        : 'Este profissional ainda não cadastrou horários na agenda.';
+
+                if (data.value) {
+                    horariosDaData();
+                }
+
+            } catch (erro) {
+
+                mensagemAgenda.textContent = erro.message;
+
+                limparHorarios('Agenda indisponível');
+            }
         }
-    });
+    );
 
-    data.addEventListener('change', montarOpcoesDeHorario);
+    data.addEventListener(
+        'change',
+        horariosDaData
+    );
 
-    botaoSolicitar.addEventListener('click', function () {
-        if (!idUsuarioAtual) {
-            alert('Não foi possível identificar o profissional.');
-            return;
+    // =====================================================
+    // SOLICITAR SERVIÇO
+    // =====================================================
+
+    formulario.addEventListener(
+        'submit',
+        async function (evento) {
+
+            evento.preventDefault();
+
+            if (bloqueado) {
+                return;
+            }
+
+            if (
+                !idAnuncioAtual ||
+                !data.value ||
+                !horario.value
+            ) {
+
+                mostrarMensagem(
+                    'Selecione uma data e um horário disponíveis.'
+                );
+
+                return;
+            }
+
+            botaoSolicitar.disabled = true;
+
+            botaoSolicitar.textContent =
+                'Enviando solicitação...';
+
+            try {
+
+                const resposta = await fetch(
+                    'solicitar_servico.php',
+                    {
+                        method: 'POST',
+
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+
+                        body: JSON.stringify({
+
+                            id_anuncio: idAnuncioAtual,
+
+                            data_servico: data.value,
+
+                            hora_servico: horario.value,
+
+                            endereco_servico:
+                                document.getElementById(
+                                    'enderecoServico'
+                                ).value.trim(),
+
+                            numero_servico:
+                                document.getElementById(
+                                    'numeroServico'
+                                ).value.trim(),
+
+                            bairro_servico:
+                                document.getElementById(
+                                    'bairroServico'
+                                ).value.trim(),
+
+                            observacao:
+                                document.getElementById(
+                                    'observacaoServico'
+                                ).value.trim()
+                        })
+                    }
+                );
+
+                const tipoResposta =
+                    resposta.headers.get('content-type') || '';
+
+                if (!tipoResposta.includes('application/json')) {
+
+                    throw new Error(
+                        'O arquivo solicitar_servico.php ainda não está pronto ou não retornou JSON.'
+                    );
+                }
+
+                const dados = await resposta.json();
+
+                if (resposta.status === 401) {
+
+                    mostrarMensagem(
+                        (dados.mensagem ||
+                            'Faça login para continuar.') +
+                        ' Acesse entrar.php.'
+                    );
+
+                    return;
+                }
+
+                if (!resposta.ok || !dados.sucesso) {
+
+                    throw new Error(
+                        dados.mensagem ||
+                        'Não foi possível solicitar o serviço.'
+                    );
+                }
+
+                mostrarMensagem(
+                    dados.mensagem ||
+                    'Solicitação enviada com sucesso!',
+                    'success'
+                );
+
+                // Remove o horário usado da lista.
+                horariosOcupados.push({
+
+                    DATA_SERVICO: data.value,
+
+                    HORA_SERVICO: horario.value
+                });
+
+                horariosDaData();
+
+            } catch (erro) {
+
+                mostrarMensagem(
+                    erro.message ||
+                    'Erro ao enviar a solicitação.'
+                );
+
+            } finally {
+
+                botaoSolicitar.disabled = bloqueado;
+
+                botaoSolicitar.textContent =
+                    'Solicitar serviço';
+            }
         }
-
-        if (!data.value || !horario.value) {
-            alert('Escolha uma data e um horário disponíveis.');
-            return;
-        }
-
-        if (data.value < dataLocalISO()) {
-            alert('Escolha uma data de hoje em diante.');
-            return;
-        }
-
-        alert(
-            'Você selecionou o dia ' +
-            data.value.split('-').reverse().join('/') +
-            ' às ' + horario.value + '.\n\n' +
-            "⚠️ AVISO DO ADMINISTRADOR\n\n" +
-    "ADM VINI AINDA PRECISA CONECTAR A AGENDA COM O BANCO DE DADOS.\n\n" +
-    "O AGENDAMENTO AINDA NÃO ESTÁ FUNCIONANDO.\n\n" +
-    "ATT: ADM VINI"
-        );
-    });
+    );
 });
 </script>
 
+</main>
 
-<?php include "rodape.php"; ?>
+<?php include __DIR__ . "/rodape.php"; ?>

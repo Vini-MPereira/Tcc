@@ -416,29 +416,58 @@ include __DIR__ . '/cabecalho.php';
 
         <?php if (count($pendentes) > 0): ?>
 
-            <div
-                class="alert alert-warning d-flex align-items-center gap-3 rounded-4"
-                role="status">
 
-                <span class="fs-3">
-                    🔔
+<div
+    class="card border-0 shadow-sm rounded-4 mb-4"
+    style="background:#FFF9EB; border-left:5px solid #E7A821 !important;">
+
+    <div class="card-body p-4">
+
+        <div class="d-flex align-items-start gap-3">
+
+            <div class="fs-2">
+                ⭐
+            </div>
+
+            <div class="flex-grow-1">
+
+                <span class="badge text-bg-warning mb-2">
+                    Avaliação obrigatória
                 </span>
 
-                <div>
+                <h2
+                    class="h5 fw-bold mb-2"
+                    style="color:#126E68;">
 
-                    <strong>
-                        Você tem <?= count($pendentes); ?>
-                        avaliação(ões) pendente(s).
-                    </strong>
+                    Sua faxina foi concluída!
 
-                    <div>
-                        A nota de 1 a 5 estrelas é obrigatória.
-                        O comentário é opcional.
-                    </div>
+                </h2>
 
-                </div>
+                <p>
+                    Você tem
+                    <strong><?= count($pendentes); ?></strong>
+                    avaliação(ões) pendente(s).
+                </p>
+
+                <p>
+                    Para continuar utilizando o LimpaLar,
+                    avalie o atendimento abaixo com uma
+                    nota de <strong>1 a 5 estrelas</strong>.
+                </p>
+
+                <p class="mb-0 text-secondary">
+                    O comentário é opcional e seu nome
+                    não será exibido publicamente.
+                </p>
 
             </div>
+
+        </div>
+
+    </div>
+
+</div>
+            
 
             <?php $ultima = $pendentes[0]; ?>
 

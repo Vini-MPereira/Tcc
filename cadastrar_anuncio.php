@@ -252,15 +252,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     }
 
-    elseif (empty($preco)) {
-
-        $mensagem =
-            "Informe um valor aproximado para sua faxina.";
-
-        $tipo_mensagem =
-            "danger";
-
-    }
 
     elseif (empty($bairros_selecionados)) {
 
@@ -402,20 +393,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 // FORMATA O VALOR
                 // =================================================
 
-                $preco =
-                    str_replace(
-                        ".",
-                        "",
-                        $preco
-                    );
+// =================================================
+// PREÇO COMBINADO DIRETAMENTE COM O CLIENTE
+// =================================================
 
-
-                $preco =
-                    str_replace(
-                        ",",
-                        ".",
-                        $preco
-                    );
+$preco = null;
 
 
                 // =================================================
@@ -709,63 +691,35 @@ $sql = "
                         </div>
 
 
+<!-- =================================================
+     INFORMAÇÃO SOBRE O VALOR DO SERVIÇO
+================================================== -->
 
-                        <!-- =================================================
-                             VALOR
-                        ================================================== -->
+<div
+    class="alert border-0 rounded-4 p-4 mb-5"
+    style="background:#E7F5F1;">
 
-                        <div class="mb-5">
+    <h3
+        class="h5 fw-bold mb-2"
+        style="color:#126E68;">
 
-                            <label
-                                for="preco"
-                                class="form-label fw-bold fs-5"
-                                style="color: #126E68;">
+        💬 Valor combinado diretamente
 
-                                Valor aproximado
+    </h3>
 
-                            </label>
+    <p class="mb-0" style="color:#617477;">
 
+        Você não precisa definir um preço para
+        publicar seu serviço.
 
-                            <div class="input-group">
+        Quando um cliente solicitar uma faxina
+        e você aceitar, vocês poderão entrar em
+        contato para combinar o valor e os
+        detalhes do atendimento.
 
-                                <span
-                                    class="input-group-text">
+    </p>
 
-                                    R$
-
-                                </span>
-
-
-                                <input
-                                    type="text"
-                                    class="form-control"
-                                    id="preco"
-                                    name="preco"
-                                    placeholder="150,00"
-                                    value="<?php
-
-                                    echo htmlspecialchars(
-                                        $preco ?? ""
-                                    );
-
-                                    ?>"
-                                    required>
-
-                            </div>
-
-
-                            <div
-                                class="form-text mt-2">
-
-                                O valor é apenas uma estimativa.
-                                O preço final será combinado diretamente
-                                com o cliente de acordo com o tamanho
-                                da casa e o serviço necessário.
-
-                            </div>
-
-                        </div>
-
+</div>
 
 
                         <!-- =================================================

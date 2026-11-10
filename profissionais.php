@@ -516,18 +516,7 @@ include __DIR__ . "/cabecalho.php";
                     ) . "..."
                     : $descricao;
 
-                $tem_preco = $anuncio["PRECO"] !== null
-                    && $anuncio["PRECO"] !== "";
-
-                $preco = $tem_preco
-                    ? "A partir de R$ " .
-                        number_format(
-                            (float)$anuncio["PRECO"],
-                            2,
-                            ",",
-                            "."
-                        )
-                    : "Preço a combinar";
+    $preco = "Valor a combinar diretamente";
 
                 $media = (float)(
                     $anuncio["MEDIA"] ?? 0

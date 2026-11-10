@@ -242,6 +242,52 @@ try {
 
     require_once __DIR__ . "/conexao.php";
 
+
+    // =====================================================
+    // EXIGE AVALIAÇÃO DAS FAXINAS CONCLUÍDAS
+    // =====================================================
+
+    $sqlPendencias = "
+        SELECT C.ID_CONTRATACAO
+        FROM CONTRATACAO C
+        WHERE C.ID_CONTRATANTE = ?
+          AND C.STATUS = 'CONCLUIDA'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM AVALIACAO A
+              WHERE A.ID_CONTRATACAO = C.ID_CONTRATACAO
+          )
+        LIMIT 1
+    ";
+
+    $stmtPendencias = mysqli_prepare(
+        $conexao,
+        $sqlPendencias
+    );
+
+    mysqli_stmt_bind_param(
+        $stmtPendencias,
+        "i",
+        $id_usuario
+    );
+
+    mysqli_stmt_execute($stmtPendencias);
+
+    $pendencia = mysqli_fetch_assoc(
+        mysqli_stmt_get_result($stmtPendencias)
+    );
+
+    mysqli_stmt_close($stmtPendencias);
+
+    if ($pendencia) {
+        responder_solicitacao(
+            false,
+            "Você tem uma faxina concluída aguardando avaliação. Acesse Minhas avaliações e dê sua nota de 1 a 5 estrelas antes de solicitar outro serviço.",
+            409
+        );
+    }
+
+
     // =================================================
     // BUSCA O ANÚNCIO ATIVO
     // =================================================

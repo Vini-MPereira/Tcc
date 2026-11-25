@@ -54,6 +54,22 @@ function data_faxina($data)
         : "Não informada";
 }
 
+function periodo_faxina($hora)
+{
+    $horario = substr((string) $hora, 0, 5);
+
+    if ($horario >= '06:00' && $horario < '12:00') {
+        return 'Manhã — 06h às 12h';
+    }
+
+    if ($horario >= '13:00' && $horario < '17:00') {
+        return 'Tarde — 13h às 17h';
+    }
+
+    return 'Horário antigo: ' . ($horario ?: 'A combinar');
+}
+
+
 // =====================================================
 // TOKEN DE SEGURANÇA DOS FORMULÁRIOS
 // =====================================================
@@ -768,17 +784,13 @@ function mostrar_faxinas($faxinas, $papel, $token)
 
                     <div class="col-12 col-md-6">
 
-                        <strong>🕒 Horário:</strong>
+                       
+                        <strong>📅 Período:</strong>
 
                         <?= escapar_faxina(
-                            $faxina["HORA_SERVICO"]
-                                ? substr(
-                                    $faxina["HORA_SERVICO"],
-                                    0,
-                                    5
-                                )
-                                : "A combinar"
+                            periodo_faxina($faxina["HORA_SERVICO"])
                         ); ?>
+
 
                     </div>
 

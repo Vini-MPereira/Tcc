@@ -1,546 +1,237 @@
 
 <?php
-// =====================================================
-// PROFISSIONAIS - LIMPA LAR
-// =====================================================
+// LIMPA LAR - PROFISSIONAIS POR PERÍODOS
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// =====================================================
-// FUNÇÕES
-// =====================================================
+require_once __DIR__ . '/conexao.php';
 
-function escapar($texto)
-{
+function prof_esc($valor) {
     return htmlspecialchars(
-        (string) ($texto ?? ""),
+        (string)($valor ?? ''),
         ENT_QUOTES,
-        "UTF-8"
+        'UTF-8'
     );
 }
-
-// Sistema de estrelas.
-
-if (is_file(__DIR__ . "/exibir_estrelas.php")) {
-    require_once __DIR__ . "/exibir_estrelas.php";
-}
-
-if (!function_exists("exibir_estrelas")) {
-
-    function exibir_estrelas($nota)
-    {
-        $cheias = max(
-            0,
-            min(5, (int) round((float) $nota))
-        );
-
-        return '<span style="color:#E5A800">' .
-            str_repeat('★', $cheias) .
-            str_repeat('☆', 5 - $cheias) .
-            '</span>';
-    }
-}
-
-// =====================================================
-// CONEXÃO COM O BANCO
-// =====================================================
 
 $anuncios = [];
-$erro_consulta = "";
-$conexao_ok = false;
+$erro = '';
 
 try {
+    $sql = "
+        SELECT
+            A.ID_ANUNCIO,
+            A.ID_USUARIO,
+            A.DESCRICAO,
+            A.FOTO,
+            U.NOME,
+            U.FOTO AS FOTO_USUARIO,
 
-    require_once __DIR__ . "/conexao.php";
+            (
+                SELECT AVG(V.NOTA)
+                FROM AVALIACAO V
+                WHERE V.ID_AVALIADO = A.ID_USUARIO
+            ) AS MEDIA,
 
-    $conexao_ok = isset($conexao)
-        && $conexao instanceof mysqli;
+            (
+                SELECT COUNT(*)
+                FROM AVALIACAO V
+                WHERE V.ID_AVALIADO = A.ID_USUARIO
+            ) AS TOTAL
 
-    if (!$conexao_ok) {
-        throw new Exception(
-            "A conexão com o MySQL não foi iniciada."
-        );
-    }
+        FROM ANUNCIO A
 
-} catch (Throwable $erro) {
+        INNER JOIN USUARIO U
+            ON U.ID_USUARIO = A.ID_USUARIO
 
+        WHERE A.STATUS = 'ATIVO'
+          AND U.ATIVO = 1
+
+        ORDER BY A.DATA_CADASTRO DESC
+    ";
+
+    $resultado = mysqli_query($conexao, $sql);
+
+    $anuncios = mysqli_fetch_all(
+        $resultado,
+        MYSQLI_ASSOC
+    );
+
+} catch (Throwable $e) {
     error_log(
-        "LimpaLar - conexão: " . $erro->getMessage()
+        'LimpaLar - profissionais: ' . $e->getMessage()
     );
 
-    $erro_consulta =
-        "Não foi possível conectar ao banco de dados. " .
-        "Verifique o MySQL no XAMPP.";
+    $erro = 'Não foi possível carregar os profissionais.';
 }
 
-// =====================================================
-// CONSULTAR DISPONIBILIDADE DO PROFISSIONAL
-// =====================================================
+$id_logado = (int)($_SESSION['ID_USUARIO'] ?? 0);
 
-if (($_GET["acao"] ?? "") === "disponibilidade") {
-
-    header("Content-Type: application/json; charset=utf-8");
-
-    $idUsuario = filter_input(
-        INPUT_GET,
-        "id_usuario",
-        FILTER_VALIDATE_INT
-    );
-
-    if (!$idUsuario || $idUsuario < 1) {
-
-        http_response_code(400);
-
-        echo json_encode([
-            "sucesso" => false,
-            "mensagem" => "Profissional inválido.",
-            "horarios" => [],
-            "ocupados" => []
-        ], JSON_UNESCAPED_UNICODE);
-
-        exit;
-    }
-
-    if (!$conexao_ok) {
-
-        http_response_code(503);
-
-        echo json_encode([
-            "sucesso" => false,
-            "mensagem" => $erro_consulta,
-            "horarios" => [],
-            "ocupados" => []
-        ], JSON_UNESCAPED_UNICODE);
-
-        exit;
-    }
-
-    try {
-
-        // Busca horários cadastrados.
-
-        $sqlAgenda = "
-            SELECT
-                DIA_SEMANA,
-                HORA_INICIO,
-                HORA_FIM
-            FROM DISPONIBILIDADE
-            WHERE ID_USUARIO = ?
-              AND ATIVO = 1
-            ORDER BY HORA_INICIO
-        ";
-
-        $stmtAgenda = mysqli_prepare(
-            $conexao,
-            $sqlAgenda
-        );
-
-        mysqli_stmt_bind_param(
-            $stmtAgenda,
-            "i",
-            $idUsuario
-        );
-
-        mysqli_stmt_execute($stmtAgenda);
-
-        $resultadoAgenda = mysqli_stmt_get_result(
-            $stmtAgenda
-        );
-
-        $horarios = mysqli_fetch_all(
-            $resultadoAgenda,
-            MYSQLI_ASSOC
-        );
-
-        mysqli_stmt_close($stmtAgenda);
-
-        // Busca horários ocupados.
-
-        $sqlOcupados = "
-            SELECT
-                DATE_FORMAT(
-                    DATA_SERVICO,
-                    '%Y-%m-%d'
-                ) AS DATA_SERVICO,
-
-                TIME_FORMAT(
-                    HORA_SERVICO,
-                    '%H:%i'
-                ) AS HORA_SERVICO
-
-            FROM CONTRATACAO
-
-            WHERE ID_PROFISSIONAL = ?
-              AND DATA_SERVICO >= CURDATE()
-              AND STATUS IN (
-                  'SOLICITADA',
-                  'ACEITA'
-              )
-        ";
-
-        $stmtOcupados = mysqli_prepare(
-            $conexao,
-            $sqlOcupados
-        );
-
-        mysqli_stmt_bind_param(
-            $stmtOcupados,
-            "i",
-            $idUsuario
-        );
-
-        mysqli_stmt_execute($stmtOcupados);
-
-        $resultadoOcupados = mysqli_stmt_get_result(
-            $stmtOcupados
-        );
-
-        $ocupados = mysqli_fetch_all(
-            $resultadoOcupados,
-            MYSQLI_ASSOC
-        );
-
-        mysqli_stmt_close($stmtOcupados);
-
-        echo json_encode([
-            "sucesso" => true,
-            "mensagem" => "",
-            "horarios" => $horarios,
-            "ocupados" => $ocupados
-        ], JSON_UNESCAPED_UNICODE);
-
-    } catch (Throwable $erro) {
-
-        error_log(
-            "LimpaLar - agenda: " . $erro->getMessage()
-        );
-
-        http_response_code(503);
-
-        echo json_encode([
-            "sucesso" => false,
-            "mensagem" => "Não foi possível carregar a agenda deste profissional.",
-            "horarios" => [],
-            "ocupados" => []
-        ], JSON_UNESCAPED_UNICODE);
-    }
-
-    exit;
-}
-
-// =====================================================
-// LISTAR ANÚNCIOS ATIVOS
-// =====================================================
-
-if ($conexao_ok) {
-
-    try {
-
-        $sql = "
-            SELECT
-                A.ID_ANUNCIO,
-                A.ID_USUARIO,
-                A.DESCRICAO,
-                A.FOTO,
-
-                U.NOME,
-                U.FOTO AS FOTO_USUARIO,
-
-                (
-                    SELECT AVG(V.NOTA)
-                    FROM AVALIACAO V
-                    WHERE V.ID_AVALIADO = A.ID_USUARIO
-                ) AS MEDIA,
-
-                (
-                    SELECT COUNT(*)
-                    FROM AVALIACAO V
-                    WHERE V.ID_AVALIADO = A.ID_USUARIO
-                ) AS TOTAL
-
-            FROM ANUNCIO A
-
-            INNER JOIN USUARIO U
-                ON U.ID_USUARIO = A.ID_USUARIO
-
-            WHERE A.STATUS = ?
-              AND U.ATIVO = ?
-
-            ORDER BY A.DATA_CADASTRO DESC
-        ";
-
-        $status_ativo = "ATIVO";
-        $usuario_ativo = 1;
-
-        $stmt = mysqli_prepare(
-            $conexao,
-            $sql
-        );
-
-        mysqli_stmt_bind_param(
-            $stmt,
-            "si",
-            $status_ativo,
-            $usuario_ativo
-        );
-
-        mysqli_stmt_execute($stmt);
-
-        $resultado = mysqli_stmt_get_result($stmt);
-
-        $anuncios = mysqli_fetch_all(
-            $resultado,
-            MYSQLI_ASSOC
-        );
-
-        mysqli_stmt_close($stmt);
-
-    } catch (Throwable $erro) {
-
-        error_log(
-            "LimpaLar - anúncios: " . $erro->getMessage()
-        );
-
-        $erro_consulta =
-            "Não foi possível consultar os anúncios. " .
-            "Confira as tabelas ANUNCIO, USUARIO e AVALIACAO.";
-    }
-}
-
-$id_usuario_logado = (int) (
-    $_SESSION["ID_USUARIO"] ?? 0
-);
-
-include __DIR__ . "/cabecalho.php";
+include __DIR__ . '/cabecalho.php';
 ?>
 
-<!-- =====================================================
-     ESTILOS DA PÁGINA
-====================================================== -->
-
 <style>
-    .prof-titulo {
-        color: #126E68;
-        font-weight: 700;
-    }
-
-    .prof-texto {
-        color: #617477;
-    }
-
-    .prof-card {
+    .lp-card {
         border: 0;
         border-radius: 18px;
         overflow: hidden;
-        transition: transform .2s, box-shadow .2s;
+        height: 100%;
+        box-shadow: 0 5px 20px #126e681a;
     }
 
-    .prof-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 25px rgba(18, 110, 104, .13) !important;
-    }
-
-    .prof-foto,
-    .prof-sem-foto {
+    .lp-foto {
+        height: 200px;
         width: 100%;
-        height: 205px;
-    }
-
-    .prof-foto {
         object-fit: cover;
     }
 
-    .prof-sem-foto {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #E7F5F1;
+    .lp-sem-foto {
+        height: 200px;
+        display: grid;
+        place-items: center;
+        background: #e7f5f1;
         font-size: 65px;
     }
 
-    .prof-descricao {
-        color: #617477;
-        line-height: 1.55;
-        overflow-wrap: anywhere;
+    .lp-verde {
+        color: #126e68;
     }
 
-    .prof-preco {
-        color: #126E68;
-        font-weight: 700;
-        font-size: 17px;
-    }
-
-    .btn-limpalar {
-        background: #18A999;
-        border-color: #18A999;
+    .lp-btn {
+        background: #18a999;
+        border-color: #18a999;
         color: white;
     }
 
-    .btn-limpalar:hover,
-    .btn-limpalar:focus {
-        background: #126E68;
-        border-color: #126E68;
+    .lp-btn:hover,
+    .lp-btn:focus {
+        background: #126e68;
+        border-color: #126e68;
         color: white;
     }
 
-    /* MODAL */
-
-    .prof-modal .modal-header {
-        background: #E7F5F1;
+    .lp-periodo {
+        cursor: pointer;
+        border: 2px solid #d9e9e5;
+        border-radius: 14px;
+        padding: 15px;
+        height: 100%;
+        transition: .15s;
     }
 
-    .prof-modal .modal-content {
-        border: 0;
-        border-radius: 18px;
-        overflow: hidden;
+    .lp-periodo:has(input:checked) {
+        border-color: #18a999;
+        background: #e7f5f1;
     }
 
-    .prof-modal-foto {
+    .lp-periodo:has(input:disabled) {
+        cursor: not-allowed;
+        opacity: .48;
+    }
+
+    .lp-modal-foto {
         width: 100%;
-        height: 220px;
+        height: 190px;
         object-fit: cover;
         border-radius: 12px;
     }
 
-    .prof-modal-placeholder {
-        height: 220px;
-        background: #E7F5F1;
+    .lp-modal-sem-foto {
+        height: 190px;
+        display: grid;
+        place-items: center;
+        background: #e7f5f1;
         border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 65px;
+        font-size: 60px;
     }
 
-    .prof-modal-descricao {
-        white-space: pre-line;
-        overflow-wrap: anywhere;
-    }
-
-    .prof-modal label {
-        color: #243438;
-        font-weight: 600;
-    }
-
-    .prof-modal .form-control:focus,
-    .prof-modal .form-select:focus {
-        border-color: #18A999;
-        box-shadow: 0 0 0 .2rem rgba(24, 169, 153, .15);
+    .lp-modal-foto[hidden],
+    .lp-modal-sem-foto[hidden] {
+        display: none !important;
     }
 </style>
 
-<!-- =====================================================
-     LISTA DE PROFISSIONAIS
-====================================================== -->
+<!-- LISTA DE PROFISSIONAIS -->
 
 <section class="container py-5">
 
     <div class="text-center mb-5">
 
-        <h1 class="prof-titulo">
+        <h1 class="fw-bold lp-verde">
             🧹 Profissionais de limpeza
         </h1>
 
-        <p class="prof-texto mb-0">
-            Conheça os profissionais disponíveis,
-            confira as avaliações e solicite sua faxina.
+        <p class="text-secondary">
+            Escolha um profissional e solicite sua faxina.
         </p>
 
     </div>
 
-    <?php if ($erro_consulta !== ""): ?>
+    <?php if ($erro): ?>
 
-        <div class="alert alert-danger" role="alert">
-            <?= escapar($erro_consulta); ?>
+        <div class="alert alert-danger">
+            <?= prof_esc($erro) ?>
         </div>
 
-    <?php elseif (empty($anuncios)): ?>
+    <?php elseif (!$anuncios): ?>
 
-        <div class="alert alert-light border text-center">
-            Ainda não existem anúncios ativos de profissionais.
+        <div class="alert alert-info">
+            Ainda não existem anúncios ativos.
         </div>
 
     <?php else: ?>
 
-        <!-- CARDS DOS PROFISSIONAIS -->
-
         <div class="row g-4">
 
-            <?php foreach ($anuncios as $anuncio): ?>
+            <?php foreach ($anuncios as $a): ?>
 
                 <?php
-
-                // Escolhe uma foto válida.
-
-                $foto = "";
+                $foto = '';
 
                 foreach (
                     [
-                        $anuncio["FOTO_USUARIO"] ?? "",
-                        $anuncio["FOTO"] ?? ""
-                    ] as $caminho
+                        $a['FOTO_USUARIO'] ?? '',
+                        $a['FOTO'] ?? ''
+                    ] as $arquivo
                 ) {
-
-                    $caminho = trim((string) $caminho);
+                    $arquivo = trim((string)$arquivo);
 
                     if (
-                        $caminho !== "" &&
-                        is_file(__DIR__ . "/" . $caminho)
+                        $arquivo !== '' &&
+                        is_file(__DIR__ . '/' . $arquivo)
                     ) {
-                        $foto = $caminho;
+                        $foto = $arquivo;
                         break;
                     }
                 }
 
-                $foto_valida = $foto !== "";
+                $descricao = (string)($a['DESCRICAO'] ?? '');
 
-                $descricao = (string) (
-                    $anuncio["DESCRICAO"] ?? ""
-                );
+                $resumo = function_exists('mb_substr')
+                    ? mb_substr($descricao, 0, 145, 'UTF-8')
+                    : substr($descricao, 0, 145);
 
-                $tamanho = function_exists("mb_strlen")
-                    ? mb_strlen($descricao, "UTF-8")
-                    : strlen($descricao);
-
-                $descricao_curta = $tamanho > 140
-                    ? (
-                        function_exists("mb_substr")
-                            ? mb_substr($descricao, 0, 140, "UTF-8")
-                            : substr($descricao, 0, 140)
-                    ) . "..."
-                    : $descricao;
-
-                $preco = "Valor a combinar diretamente";
-
-                $media = (float) (
-                    $anuncio["MEDIA"] ?? 0
-                );
-
-                $total = (int) (
-                    $anuncio["TOTAL"] ?? 0
-                );
-
+                $media = (float)($a['MEDIA'] ?? 0);
+                $total = (int)($a['TOTAL'] ?? 0);
                 ?>
 
                 <div class="col-12 col-md-6 col-lg-4">
 
-                    <article class="card prof-card shadow-sm h-100">
+                    <div class="lp-card card">
 
-                        <!-- FOTO -->
-
-                        <?php if ($foto_valida): ?>
+                        <?php if ($foto): ?>
 
                             <img
-                                src="<?= escapar($foto); ?>"
-                                class="prof-foto"
-                                alt="Foto de <?= escapar($anuncio["NOME"]); ?>"
-                                loading="lazy">
+                                class="lp-foto"
+                                src="<?= prof_esc($foto) ?>"
+                                alt="Foto do profissional"
+                            >
 
                         <?php else: ?>
 
-                            <div class="prof-sem-foto">
+                            <div class="lp-sem-foto">
                                 🧹
                             </div>
 
@@ -548,86 +239,60 @@ include __DIR__ . "/cabecalho.php";
 
                         <div class="card-body p-4 d-flex flex-column">
 
-                            <!-- NOME -->
-
-                            <h2 class="h5 prof-titulo mb-3">
-                                <?= escapar($anuncio["NOME"]); ?>
+                            <h2 class="h5 lp-verde fw-bold">
+                                <?= prof_esc($a['NOME']) ?>
                             </h2>
 
-                            <!-- DESCRIÇÃO -->
-
-                            <p class="prof-descricao mb-3">
-                                <?= nl2br(escapar($descricao_curta)); ?>
+                            <p class="text-secondary flex-grow-1">
+                                <?= nl2br(prof_esc($resumo)) ?>
                             </p>
 
-                            <!-- AVALIAÇÕES -->
-
-                            <div class="mb-3">
+                            <p class="small text-secondary">
 
                                 <?php if ($total > 0): ?>
 
-                                    <?= exibir_estrelas($media); ?>
+                                    ⭐
+                                    <?= number_format(
+                                        $media,
+                                        1,
+                                        ',',
+                                        '.'
+                                    ) ?>
 
-                                    <span class="small prof-texto ms-1">
-
-                                        <?= escapar(
-                                            number_format(
-                                                $media,
-                                                1,
-                                                ",",
-                                                "."
-                                            )
-                                        ); ?>
-
-                                        (<?= $total; ?> avaliações)
-
-                                    </span>
+                                    (<?= $total ?> avaliações)
 
                                 <?php else: ?>
 
-                                    <span class="small prof-texto">
-                                        Ainda sem avaliações
-                                    </span>
+                                    Ainda sem avaliações
 
                                 <?php endif; ?>
 
-                            </div>
+                            </p>
 
-                            <!-- VALOR -->
-
-                            <div class="prof-preco mt-auto mb-3">
-                                <?= escapar($preco); ?>
-                            </div>
-
-                            <!-- VER PROFISSIONAL -->
+                            <p class="fw-bold lp-verde">
+                                Valor a combinar diretamente
+                            </p>
 
                             <button
                                 type="button"
-                                class="btn btn-limpalar w-100 py-2"
+                                class="btn lp-btn w-100"
                                 data-bs-toggle="modal"
                                 data-bs-target="#modalSolicitar"
 
-                                data-id-anuncio="<?= (int) $anuncio["ID_ANUNCIO"]; ?>"
-                                data-id-usuario="<?= (int) $anuncio["ID_USUARIO"]; ?>"
-
-                                data-nome="<?= escapar($anuncio["NOME"]); ?>"
-                                data-descricao="<?= escapar($descricao); ?>"
-
-                                data-foto="<?= $foto_valida ? escapar($foto) : ""; ?>"
-
-                                data-media="<?= escapar(
-                                    number_format($media, 1, ".", "")
-                                ); ?>"
-
-                                data-total="<?= $total; ?>">
-
-                                Ver profissional
-
+                                data-id-anuncio="<?= (int)$a['ID_ANUNCIO'] ?>"
+                                data-id-usuario="<?= (int)$a['ID_USUARIO'] ?>"
+                                data-nome="<?= prof_esc($a['NOME']) ?>"
+                                data-descricao="<?= prof_esc($descricao) ?>"
+                                data-foto="<?= prof_esc($foto) ?>"
+                                data-media="<?= number_format($media, 1, '.', '') ?>"
+                                data-total="<?= $total ?>"
+                            >
+                                Conheça o profissional
                             </button>
 
                         </div>
 
-                    </article>
+                    </div>
 
                 </div>
 
@@ -639,133 +304,120 @@ include __DIR__ . "/cabecalho.php";
 
 </section>
 
-<!-- =====================================================
-     MODAL DO PROFISSIONAL
-====================================================== -->
+<!-- MODAL CONHEÇA O PROFISSIONAL -->
 
 <div
-    class="modal fade prof-modal"
+    class="modal fade"
     id="modalSolicitar"
     tabindex="-1"
-    aria-labelledby="tituloModalProfissional"
-    aria-hidden="true">
+    aria-labelledby="tituloProfissional"
+    aria-hidden="true"
+>
 
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
 
-        <div class="modal-content">
+        <div class="modal-content border-0 rounded-4">
 
-            <!-- CABEÇALHO DO MODAL -->
-
-            <div class="modal-header px-4 py-3">
+            <div
+                class="modal-header"
+                style="background:#e7f5f1"
+            >
 
                 <h2
-                    class="modal-title h5 prof-titulo"
-                    id="tituloModalProfissional">
-
+                    id="tituloProfissional"
+                    class="modal-title h5 lp-verde fw-bold"
+                >
                     Conheça o profissional
-
                 </h2>
 
                 <button
                     type="button"
                     class="btn-close"
                     data-bs-dismiss="modal"
-                    aria-label="Fechar">
-                </button>
+                    aria-label="Fechar"
+                ></button>
 
             </div>
-
-            <!-- CONTEÚDO -->
 
             <div class="modal-body p-4">
 
                 <div class="row g-4">
 
-                    <!-- PERFIL -->
+                    <!-- FOTO E AVALIAÇÕES -->
 
-                    <div class="col-12 col-lg-4">
+                    <div class="col-lg-4">
 
                         <img
-                            id="modalFotoProfissional"
-                            class="prof-modal-foto mb-3"
+                            id="fotoModal"
+                            class="lp-modal-foto mb-3"
                             alt="Foto do profissional"
-                            hidden>
+                            hidden
+                        >
 
                         <div
-                            id="modalFotoPlaceholder"
-                            class="prof-modal-placeholder mb-3">
-
+                            id="semFotoModal"
+                            class="lp-modal-sem-foto mb-3"
+                        >
                             🧹
-
                         </div>
 
                         <h3
-                            class="h4 prof-titulo"
-                            id="modalNomeProfissional">
-
+                            id="nomeModal"
+                            class="h4 fw-bold lp-verde"
+                        >
                             Profissional
-
                         </h3>
 
-                        <div
-                            id="modalAvaliacao"
-                            class="mb-3 prof-texto">
-                        </div>
+                        <p
+                            id="avaliacaoModal"
+                            class="text-secondary"
+                        ></p>
 
-                        <div
-                            class="prof-preco"
-                            id="modalPrecoProfissional">
-
+                        <p class="fw-bold lp-verde">
                             Valor a combinar diretamente
-
-                        </div>
+                        </p>
 
                     </div>
 
                     <!-- DESCRIÇÃO -->
 
-                    <div class="col-12 col-lg-4">
+                    <div class="col-lg-4">
 
-                        <h3 class="h5 prof-titulo">
+                        <h3 class="h5 lp-verde">
                             Sobre o profissional
                         </h3>
 
                         <p
-                            id="modalDescricaoProfissional"
-                            class="prof-texto prof-modal-descricao">
-
-                            Sem descrição.
-
-                        </p>
+                            id="descricaoModal"
+                            class="text-secondary"
+                            style="white-space:pre-line;overflow-wrap:anywhere"
+                        ></p>
 
                         <div
                             class="p-3 rounded-3"
-                            style="background:#E7F5F1;color:#243438">
-
-                            O profissional recebe sua solicitação
-                            e decide se aceita.
-
-                            Após a aceitação, o contato fica
-                            disponível para combinar os detalhes
-                            e o valor diretamente.
-
+                            style="background:#e7f5f1"
+                        >
+                            Após o profissional aceitar sua
+                            solicitação, vocês poderão entrar
+                            em contato para combinar o valor
+                            e os detalhes.
                         </div>
 
                     </div>
 
-                    <!-- AGENDAMENTO -->
+                    <!-- FORMULÁRIO -->
 
-                    <div class="col-12 col-lg-4">
+                    <div class="col-lg-4">
 
-                        <h3 class="h5 prof-titulo mb-3">
+                        <h3 class="h5 lp-verde fw-bold">
                             Solicitar faxina
                         </h3>
 
                         <div
-                            id="avisoUsuario"
+                            id="alertaLogin"
                             class="alert alert-warning"
-                            hidden>
-                        </div>
+                            hidden
+                        ></div>
 
                         <form id="formSolicitarServico">
 
@@ -775,50 +427,86 @@ include __DIR__ . "/cabecalho.php";
 
                                 <label
                                     for="dataServico"
-                                    class="form-label">
-
+                                    class="form-label fw-bold"
+                                >
                                     Data da faxina
-
                                 </label>
 
                                 <input
-                                    type="date"
                                     id="dataServico"
+                                    type="date"
                                     class="form-control"
-                                    required>
+                                    required
+                                >
 
                             </div>
 
-                            <!-- HORÁRIO -->
+                            <!-- MANHÃ OU TARDE -->
 
-                            <div class="mb-3">
+                            <fieldset class="mb-3">
 
-                                <label
-                                    for="horarioServico"
-                                    class="form-label">
+                                <legend class="fs-6 fw-bold">
+                                    Escolha um período
+                                </legend>
 
-                                    Horário disponível
+                                <div class="row g-2">
 
-                                </label>
+                                    <div class="col-6">
 
-                                <select
-                                    id="horarioServico"
-                                    class="form-select"
-                                    required>
+                                        <label class="lp-periodo d-block">
 
-                                    <option value="">
-                                        Escolha primeiro uma data
-                                    </option>
+                                            <input
+                                                class="form-check-input me-1"
+                                                type="radio"
+                                                name="periodoServico"
+                                                value="MANHA"
+                                                required
+                                            >
 
-                                </select>
+                                            <strong>☀️ Manhã</strong>
 
-                                <div
-                                    id="mensagemAgenda"
-                                    class="small prof-texto mt-2"
-                                    aria-live="polite">
+                                            <small class="d-block text-secondary mt-1">
+                                                06h às 12h
+                                            </small>
+
+                                        </label>
+
+                                    </div>
+
+                                    <div class="col-6">
+
+                                        <label class="lp-periodo d-block">
+
+                                            <input
+                                                class="form-check-input me-1"
+                                                type="radio"
+                                                name="periodoServico"
+                                                value="TARDE"
+                                                required
+                                            >
+
+                                            <strong>🌤️ Tarde</strong>
+
+                                            <small class="d-block text-secondary mt-1">
+                                                13h às 17h
+                                            </small>
+
+                                        </label>
+
+                                    </div>
+
                                 </div>
 
-                            </div>
+                                <div
+                                    id="mensagemPeriodos"
+                                    class="form-text"
+                                    aria-live="polite"
+                                >
+                                    Escolha uma data e selecione
+                                    manhã ou tarde.
+                                </div>
+
+                            </fieldset>
 
                             <!-- ENDEREÇO -->
 
@@ -826,23 +514,20 @@ include __DIR__ . "/cabecalho.php";
 
                                 <label
                                     for="enderecoServico"
-                                    class="form-label">
-
-                                    Endereço da faxina
-
+                                    class="form-label fw-bold"
+                                >
+                                    Rua ou avenida
                                 </label>
 
                                 <input
                                     type="text"
-                                    id="enderecoServico"
                                     class="form-control"
+                                    id="enderecoServico"
                                     maxlength="255"
-                                    placeholder="Rua ou avenida"
-                                    required>
+                                    required
+                                >
 
                             </div>
-
-                            <!-- NÚMERO E BAIRRO DO ENDEREÇO -->
 
                             <div class="row g-2 mb-3">
 
@@ -850,18 +535,18 @@ include __DIR__ . "/cabecalho.php";
 
                                     <label
                                         for="numeroServico"
-                                        class="form-label">
-
+                                        class="form-label fw-bold"
+                                    >
                                         Número
-
                                     </label>
 
                                     <input
                                         type="text"
-                                        id="numeroServico"
                                         class="form-control"
+                                        id="numeroServico"
                                         maxlength="20"
-                                        required>
+                                        required
+                                    >
 
                                 </div>
 
@@ -869,71 +554,59 @@ include __DIR__ . "/cabecalho.php";
 
                                     <label
                                         for="bairroServico"
-                                        class="form-label">
-
+                                        class="form-label fw-bold"
+                                    >
                                         Bairro da faxina
-
                                     </label>
 
                                     <input
                                         type="text"
-                                        id="bairroServico"
                                         class="form-control"
+                                        id="bairroServico"
                                         maxlength="100"
-                                        placeholder="Bairro do endereço">
+                                    >
 
                                 </div>
 
                             </div>
 
-                            <!-- OBSERVAÇÃO -->
-
                             <div class="mb-3">
 
                                 <label
                                     for="observacaoServico"
-                                    class="form-label">
-
-                                    Observação (opcional)
-
+                                    class="form-label fw-bold"
+                                >
+                                    Observações (opcional)
                                 </label>
 
                                 <textarea
-                                    id="observacaoServico"
                                     class="form-control"
+                                    id="observacaoServico"
                                     rows="2"
-                                    maxlength="1000"></textarea>
+                                    maxlength="1000"
+                                ></textarea>
 
                             </div>
-
-                            <!-- MENSAGENS -->
 
                             <div
                                 id="mensagemSolicitacao"
-                                class="mb-3"
-                                aria-live="polite">
-                            </div>
-
-                            <!-- BOTÃO SOLICITAR -->
+                                aria-live="polite"
+                            ></div>
 
                             <button
-                                type="submit"
                                 id="btnSolicitarServico"
-                                class="btn btn-limpalar w-100 py-2">
-
-                                Solicitar serviço
-
+                                type="submit"
+                                class="btn lp-btn w-100 mt-2"
+                            >
+                                Solicitar faxina
                             </button>
 
-                            <!-- ACOMPANHAR SOLICITAÇÃO -->
-
                             <a
+                                id="acompanharServico"
                                 href="concluir_faxina.php?aba=contratei"
-                                id="verMinhasFaxinas"
-                                class="btn btn-outline-success w-100 mt-2 d-none">
-
+                                class="btn btn-outline-success w-100 mt-2 d-none"
+                            >
                                 Acompanhar em Minhas faxinas
-
                             </a>
 
                         </form>
@@ -950,633 +623,307 @@ include __DIR__ . "/cabecalho.php";
 
 </div>
 
-<!-- =====================================================
-     JAVASCRIPT - MODAL E AGENDAMENTO
-====================================================== -->
-
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', () => {
 
     const modal = document.getElementById('modalSolicitar');
 
-    if (!modal) {
-        return;
-    }
+    if (!modal) return;
 
-    const idUsuarioLogado = <?= $id_usuario_logado; ?>;
+    const usuarioLogado = <?= $id_logado ?>;
 
-    // =====================================================
-    // ELEMENTOS DO MODAL
-    // =====================================================
+    const form = document.getElementById('formSolicitarServico');
+    const data = document.getElementById('dataServico');
 
-    const foto = document.getElementById(
-        'modalFotoProfissional'
-    );
-
-    const placeholder = document.getElementById(
-        'modalFotoPlaceholder'
-    );
-
-    const nome = document.getElementById(
-        'modalNomeProfissional'
-    );
-
-    const descricao = document.getElementById(
-        'modalDescricaoProfissional'
-    );
-
-    const avaliacao = document.getElementById(
-        'modalAvaliacao'
-    );
-
-    const data = document.getElementById(
-        'dataServico'
-    );
-
-    const horario = document.getElementById(
-        'horarioServico'
-    );
-
-    const mensagemAgenda = document.getElementById(
-        'mensagemAgenda'
-    );
-
-    const mensagemSolicitacao = document.getElementById(
-        'mensagemSolicitacao'
-    );
-
-    const avisoUsuario = document.getElementById(
-        'avisoUsuario'
-    );
-
-    const formulario = document.getElementById(
-        'formSolicitarServico'
-    );
-
-    const botaoSolicitar = document.getElementById(
-        'btnSolicitarServico'
-    );
-
-    const acompanhar = document.getElementById(
-        'verMinhasFaxinas'
-    );
-
-    // =====================================================
-    // DIAS DA SEMANA
-    // =====================================================
-
-    const diasSemana = [
-        'DOMINGO',
-        'SEGUNDA',
-        'TERCA',
-        'QUARTA',
-        'QUINTA',
-        'SEXTA',
-        'SABADO'
+    const radios = [
+        ...document.querySelectorAll(
+            'input[name="periodoServico"]'
+        )
     ];
 
-    let idUsuarioAtual = 0;
-    let idAnuncioAtual = 0;
+    const status = document.getElementById('mensagemPeriodos');
+    const mensagem = document.getElementById('mensagemSolicitacao');
+    const botaoEnviar = document.getElementById('btnSolicitarServico');
+    const acompanhar = document.getElementById('acompanharServico');
 
-    let horariosDisponiveis = [];
-    let horariosOcupados = [];
-
-    let agendaCarregada = false;
+    let anuncioId = 0;
+    let profissionalId = 0;
     let bloqueado = false;
 
-    let identificadorConsulta = 0;
-
-    // Ignora consultas de modais fechados.
-
-    modal.addEventListener(
-        'hidden.bs.modal',
-        function () {
-            identificadorConsulta++;
-        }
-    );
-
-    // =====================================================
     // DATA LOCAL
-    // =====================================================
 
-    function dataLocalISO() {
+    function hojeLocal() {
+        const d = new Date();
 
-        const agora = new Date();
-
-        const ano = agora.getFullYear();
-
-        const mes = String(
-            agora.getMonth() + 1
-        ).padStart(2, '0');
-
-        const dia = String(
-            agora.getDate()
-        ).padStart(2, '0');
-
-        return `${ano}-${mes}-${dia}`;
+        return [
+            d.getFullYear(),
+            String(d.getMonth() + 1).padStart(2, '0'),
+            String(d.getDate()).padStart(2, '0')
+        ].join('-');
     }
 
-    // =====================================================
-    // LIMPAR HORÁRIOS
-    // =====================================================
+    // DESMARCAR E DESABILITAR PERÍODOS
 
-    function limparHorarios(texto) {
-
-        horario.replaceChildren(
-            new Option(texto, '')
-        );
+    function desligarRadios() {
+        radios.forEach(r => {
+            r.checked = false;
+            r.disabled = true;
+        });
     }
 
-    // =====================================================
-    // MOSTRAR MENSAGENS
-    // =====================================================
+    // MOSTRAR MENSAGEM
 
-    function mostrarMensagem(texto, tipo = 'danger') {
-
-        mensagemSolicitacao.textContent = texto;
-
-        mensagemSolicitacao.className =
-            `alert alert-${tipo} mb-3`;
+    function mensagemEnvio(texto, tipo = 'danger') {
+        mensagem.className = 'alert alert-' + tipo + ' mt-3';
+        mensagem.textContent = texto;
     }
 
-    // =====================================================
-    // MONTAR HORÁRIOS DISPONÍVEIS
-    // =====================================================
+    // ATIVAR MANHÃ E TARDE DEPOIS DE ESCOLHER DATA
 
-    function horariosDaData() {
+    function atualizarPeriodos() {
 
-        limparHorarios('Selecione um horário');
+        desligarRadios();
 
-        const valorData = data.value;
-
-        if (!valorData || !agendaCarregada) {
+        if (!data.value || data.value < hojeLocal()) {
+            status.textContent =
+                'Escolha uma data de hoje em diante.';
             return;
         }
 
-        if (valorData < dataLocalISO()) {
-
-            mensagemAgenda.textContent =
-                'Selecione uma data de hoje em diante.';
-
-            return;
-        }
-
-        const partes = valorData
-            .split('-')
-            .map(Number);
-
-        const diaSemana = diasSemana[
-            new Date(
-                partes[0],
-                partes[1] - 1,
-                partes[2]
-            ).getDay()
-        ];
-
         const agora = new Date();
 
-        const minutosAgora =
-            agora.getHours() * 60 +
-            agora.getMinutes();
+        const minutos =
+            agora.getHours() * 60 + agora.getMinutes();
 
-        const opcoes = new Set();
+        let opcoes = 0;
 
-        horariosDisponiveis.forEach(item => {
+        radios.forEach(r => {
 
-            if (item.DIA_SEMANA !== diaSemana) {
-                return;
+            const inicio = r.value === 'MANHA'
+                ? 360
+                : 780;
+
+            // Não permite selecionar um período
+            // que já começou no dia atual.
+
+            r.disabled =
+                data.value === hojeLocal() &&
+                minutos >= inicio;
+
+            if (!r.disabled) {
+                opcoes++;
             }
 
-            const [hi, mi] = item.HORA_INICIO
-                .substring(0, 5)
-                .split(':')
-                .map(Number);
-
-            const [hf, mf] = item.HORA_FIM
-                .substring(0, 5)
-                .split(':')
-                .map(Number);
-
-            const fim = hf * 60 + mf;
-
-            // Intervalos de uma hora.
-
-            for (
-                let minuto = hi * 60 + mi;
-                minuto + 60 <= fim;
-                minuto += 60
-            ) {
-
-                // Não mostra horários passados.
-
-                if (
-                    valorData === dataLocalISO() &&
-                    minuto <= minutosAgora
-                ) {
-                    continue;
-                }
-
-                const valor =
-                    String(
-                        Math.floor(minuto / 60)
-                    ).padStart(2, '0') +
-                    ':' +
-                    String(
-                        minuto % 60
-                    ).padStart(2, '0');
-
-                // Não mostra horários ocupados.
-
-                const ocupado = horariosOcupados.some(
-                    itemOcupado =>
-
-                        itemOcupado.DATA_SERVICO === valorData &&
-
-                        String(
-                            itemOcupado.HORA_SERVICO
-                        ).substring(0, 5) === valor
-                );
-
-                if (!ocupado) {
-                    opcoes.add(valor);
-                }
-            }
         });
 
-        [...opcoes]
-            .sort()
-            .forEach(valor => {
-
-                horario.add(
-                    new Option(valor, valor)
-                );
-            });
-
-        if (opcoes.size === 0) {
-
-            limparHorarios('Sem horários disponíveis');
-
-            mensagemAgenda.textContent =
-                'Não há horários livres para essa data.';
-
-        } else {
-
-            mensagemAgenda.textContent =
-                'Escolha um dos horários disponíveis.';
-        }
+        status.textContent = opcoes
+            ? 'Selecione manhã ou tarde. O profissional confirmará a solicitação.'
+            : 'Os períodos de hoje já começaram. Escolha outro dia.';
     }
 
-    // =====================================================
-    // ABRIR MODAL E CARREGAR PROFISSIONAL
-    // =====================================================
+    // ABRIR CONHEÇA O PROFISSIONAL
 
-    modal.addEventListener(
-        'show.bs.modal',
-        async function (evento) {
+    modal.addEventListener('show.bs.modal', event => {
 
-            const botao = evento.relatedTarget;
+        const alvo = event.relatedTarget;
 
-            if (!botao) {
-                return;
-            }
+        if (!alvo) return;
 
-            const consultaAtual = ++identificadorConsulta;
+        form.reset();
 
-            formulario.reset();
+        mensagem.textContent = '';
+        mensagem.className = '';
 
-            acompanhar.classList.add('d-none');
+        acompanhar.classList.add('d-none');
 
-            mensagemSolicitacao.className = 'mb-3';
-            mensagemSolicitacao.textContent = '';
+        anuncioId = Number(
+            alvo.dataset.idAnuncio || 0
+        );
 
-            idAnuncioAtual = Number(
-                botao.dataset.idAnuncio || 0
-            );
+        profissionalId = Number(
+            alvo.dataset.idUsuario || 0
+        );
 
-            idUsuarioAtual = Number(
-                botao.dataset.idUsuario || 0
-            );
+        bloqueado =
+            !usuarioLogado ||
+            usuarioLogado === profissionalId;
 
-            horariosDisponiveis = [];
-            horariosOcupados = [];
+        botaoEnviar.disabled = bloqueado;
 
-            agendaCarregada = false;
+        desligarRadios();
 
-            data.min = dataLocalISO();
+        data.min = hojeLocal();
 
-            limparHorarios(
-                'Escolha primeiro uma data'
-            );
+        status.textContent =
+            'Escolha uma data e selecione manhã ou tarde.';
 
-            nome.textContent =
-                botao.dataset.nome || 'Profissional';
+        document.getElementById('nomeModal').textContent =
+            alvo.dataset.nome || 'Profissional';
 
-            descricao.textContent =
-                botao.dataset.descricao ||
-                'Nenhuma descrição informada.';
+        document.getElementById('descricaoModal').textContent =
+            alvo.dataset.descricao || 'Sem descrição.';
 
-            // =================================================
-            // AVALIAÇÕES
-            // =================================================
+        // AVALIAÇÕES
 
-            const total = Number(
-                botao.dataset.total || 0
-            );
+        const total = Number(
+            alvo.dataset.total || 0
+        );
 
-            const media = Number(
-                botao.dataset.media || 0
-            );
+        const nota = Number(
+            alvo.dataset.media || 0
+        );
 
-            avaliacao.textContent = total > 0
-                ? '★'.repeat(Math.round(media)) +
-                    '☆'.repeat(5 - Math.round(media)) +
-                    '  ' +
-                    media.toFixed(1).replace('.', ',') +
-                    ` (${total} avaliações)`
+        document.getElementById('avaliacaoModal').textContent =
+            total > 0
+                ? '⭐ ' +
+                    nota.toFixed(1).replace('.', ',') +
+                    ' (' + total + ' avaliações)'
                 : 'Ainda sem avaliações';
 
-            // =================================================
-            // FOTO
-            // =================================================
+        // FOTO
 
-            const caminhoFoto =
-                botao.dataset.foto || '';
+        const foto = document.getElementById('fotoModal');
+        const semFoto = document.getElementById('semFotoModal');
 
-            foto.hidden = !caminhoFoto;
-            placeholder.hidden = !!caminhoFoto;
+        const caminho = alvo.dataset.foto || '';
 
-            if (caminhoFoto) {
+        foto.hidden = !caminho;
+        semFoto.hidden = !!caminho;
 
-                foto.src = caminhoFoto;
-
-                foto.onerror = () => {
-
-                    foto.hidden = true;
-                    placeholder.hidden = false;
-                };
-
-            } else {
-
-                foto.removeAttribute('src');
-            }
-
-            // =================================================
-            // VERIFICAR LOGIN E PRÓPRIO ANÚNCIO
-            // =================================================
-
-            bloqueado =
-                idUsuarioLogado === 0 ||
-                idUsuarioLogado === idUsuarioAtual;
-
-            avisoUsuario.hidden = !bloqueado;
-            avisoUsuario.replaceChildren();
-
-            if (idUsuarioLogado === 0) {
-
-                avisoUsuario.append(
-                    'Para solicitar uma faxina, '
-                );
-
-                const link = document.createElement('a');
-
-                link.href = 'entrar.php';
-                link.textContent = 'entre na sua conta';
-
-                avisoUsuario.appendChild(link);
-                avisoUsuario.append('.');
-
-            } else if (bloqueado) {
-
-                avisoUsuario.textContent =
-                    'Você não pode contratar seu próprio anúncio.';
-            }
-
-            botaoSolicitar.disabled = bloqueado;
-
-            mensagemAgenda.textContent =
-                'Carregando a agenda...';
-
-            // =================================================
-            // CONSULTAR DISPONIBILIDADE
-            // =================================================
-
-            try {
-
-                const resposta = await fetch(
-                    'profissionais.php?acao=disponibilidade&id_usuario=' +
-                    encodeURIComponent(idUsuarioAtual),
-                    {
-                        cache: 'no-store',
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    }
-                );
-
-                const dados = await resposta.json();
-
-                // Ignora respostas antigas.
-
-                if (consultaAtual !== identificadorConsulta) {
-                    return;
-                }
-
-                if (!resposta.ok || !dados.sucesso) {
-
-                    throw new Error(
-                        dados.mensagem ||
-                        'Não foi possível consultar a agenda.'
-                    );
-                }
-
-                horariosDisponiveis =
-                    dados.horarios || [];
-
-                horariosOcupados =
-                    dados.ocupados || [];
-
-                agendaCarregada = true;
-
-                mensagemAgenda.textContent =
-                    horariosDisponiveis.length
-                        ? 'Escolha uma data para visualizar os horários.'
-                        : 'Este profissional ainda não cadastrou horários na agenda.';
-
-                if (data.value) {
-                    horariosDaData();
-                }
-
-            } catch (erro) {
-
-                if (consultaAtual !== identificadorConsulta) {
-                    return;
-                }
-
-                mensagemAgenda.textContent =
-                    erro.message || 'Agenda indisponível.';
-
-                limparHorarios('Agenda indisponível');
-            }
+        if (caminho) {
+            foto.src = caminho;
+        } else {
+            foto.removeAttribute('src');
         }
-    );
 
-    // =====================================================
-    // ALTERAR DATA
-    // =====================================================
+        foto.onerror = () => {
+            foto.hidden = true;
+            semFoto.hidden = false;
+        };
 
-    data.addEventListener(
-        'change',
-        horariosDaData
-    );
+        // LOGIN
 
-    // =====================================================
-    // SOLICITAR SERVIÇO
-    // =====================================================
+        const aviso = document.getElementById('alertaLogin');
 
-    formulario.addEventListener(
-        'submit',
-        async function (evento) {
+        aviso.hidden = !bloqueado;
 
-            evento.preventDefault();
+        aviso.textContent = !usuarioLogado
+            ? 'Entre na sua conta para solicitar uma faxina.'
+            : 'Você não pode contratar seu próprio anúncio.';
 
-            if (bloqueado) {
-                return;
-            }
+    });
 
-            if (
-                !idAnuncioAtual ||
-                !data.value ||
-                !horario.value
-            ) {
+    data.addEventListener('change', atualizarPeriodos);
 
-                mostrarMensagem(
-                    'Selecione uma data e um horário disponíveis.'
-                );
+    // ENVIAR SOLICITAÇÃO
 
-                return;
-            }
+    form.addEventListener('submit', async e => {
 
-            botaoSolicitar.disabled = true;
+        e.preventDefault();
 
-            botaoSolicitar.textContent =
-                'Enviando solicitação...';
+        if (bloqueado) return;
 
-            try {
+        const escolha = radios.find(
+            r => r.checked && !r.disabled
+        );
 
-                const resposta = await fetch(
-                    'solicitar_servico.php',
-                    {
-                        method: 'POST',
-
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-
-                        body: JSON.stringify({
-
-                            id_anuncio: idAnuncioAtual,
-
-                            data_servico: data.value,
-
-                            hora_servico: horario.value,
-
-                            endereco_servico:
-                                document.getElementById(
-                                    'enderecoServico'
-                                ).value.trim(),
-
-                            numero_servico:
-                                document.getElementById(
-                                    'numeroServico'
-                                ).value.trim(),
-
-                            bairro_servico:
-                                document.getElementById(
-                                    'bairroServico'
-                                ).value.trim(),
-
-                            observacao:
-                                document.getElementById(
-                                    'observacaoServico'
-                                ).value.trim()
-
-                        })
-                    }
-                );
-
-                const tipoResposta =
-                    resposta.headers.get('content-type') || '';
-
-                if (!tipoResposta.includes('application/json')) {
-
-                    throw new Error(
-                        'O servidor não retornou uma resposta válida.'
-                    );
-                }
-
-                const dados = await resposta.json();
-
-                if (resposta.status === 401) {
-
-                    mostrarMensagem(
-                        (dados.mensagem ||
-                            'Faça login para continuar.') +
-                        ' Acesse entrar.php.'
-                    );
-
-                    return;
-                }
-
-                if (!resposta.ok || !dados.sucesso) {
-
-                    throw new Error(
-                        dados.mensagem ||
-                        'Não foi possível solicitar o serviço.'
-                    );
-                }
-
-                // Solicitação enviada com sucesso.
-
-                mostrarMensagem(
-                    dados.mensagem ||
-                    'Solicitação enviada com sucesso!',
-                    'success'
-                );
-
-                acompanhar.classList.remove('d-none');
-
-                // Marca horário como ocupado na tela.
-
-                horariosOcupados.push({
-                    DATA_SERVICO: data.value,
-                    HORA_SERVICO: horario.value
-                });
-
-                horariosDaData();
-
-            } catch (erro) {
-
-                mostrarMensagem(
-                    erro.message ||
-                    'Erro ao enviar a solicitação.'
-                );
-
-            } finally {
-
-                botaoSolicitar.disabled = bloqueado;
-
-                botaoSolicitar.textContent =
-                    'Solicitar serviço';
-            }
+        if (!data.value || !escolha) {
+            mensagemEnvio(
+                'Escolha uma data e um período.'
+            );
+            return;
         }
-    );
+
+        botaoEnviar.disabled = true;
+        botaoEnviar.textContent = 'Enviando...';
+
+        try {
+
+            const resposta = await fetch(
+                'solicitar_servico.php',
+                {
+                    method: 'POST',
+
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+
+                    body: JSON.stringify({
+
+                        id_anuncio: anuncioId,
+
+                        data_servico: data.value,
+
+                        periodo_servico: escolha.value,
+
+                        endereco_servico:
+                            document.getElementById(
+                                'enderecoServico'
+                            ).value.trim(),
+
+                        numero_servico:
+                            document.getElementById(
+                                'numeroServico'
+                            ).value.trim(),
+
+                        bairro_servico:
+                            document.getElementById(
+                                'bairroServico'
+                            ).value.trim(),
+
+                        observacao:
+                            document.getElementById(
+                                'observacaoServico'
+                            ).value.trim()
+
+                    })
+                }
+            );
+
+            const retorno = await resposta.json();
+
+            if (!resposta.ok || !retorno.sucesso) {
+                throw new Error(
+                    retorno.mensagem ||
+                    'Não foi possível solicitar a faxina.'
+                );
+            }
+
+            mensagemEnvio(
+                retorno.mensagem ||
+                'Solicitação enviada com sucesso!',
+                'success'
+            );
+
+            acompanhar.classList.remove('d-none');
+
+            desligarRadios();
+
+            status.textContent =
+                'Pedido enviado. Acompanhe em Minhas faxinas.';
+
+        } catch (erro) {
+
+            mensagemEnvio(
+                erro.message ||
+                'Erro ao enviar solicitação.'
+            );
+
+        } finally {
+
+            botaoEnviar.disabled = bloqueado;
+
+            botaoEnviar.textContent =
+                'Solicitar faxina';
+
+        }
+
+    });
 
 });
 </script>
 
-<!-- FECHA O MAIN DO CABEÇALHO -->
-
 </main>
 
-<?php include __DIR__ . "/rodape.php"; ?>
+<?php include __DIR__ . '/rodape.php'; ?>

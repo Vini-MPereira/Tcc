@@ -926,4 +926,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </main>
 
+<script src="limite_data_agendamento.js?v=1"></script> 
+
 <?php include __DIR__ . '/rodape.php'; ?>

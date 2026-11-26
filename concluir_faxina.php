@@ -1391,4 +1391,6 @@ document.addEventListener(
 
 </main>
 
+<script src="monitor_faxinas.js?v=1"></script>
+
 <?php include __DIR__ . "/rodape.php"; ?>

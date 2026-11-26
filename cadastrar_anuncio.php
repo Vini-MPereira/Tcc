@@ -1,971 +1,482 @@
+
 <?php
-
-session_start();
-
-
 // =====================================================
-// VERIFICA SE O USUÁRIO ESTÁ LOGADO
+// LIMPA LAR - OFERECER MEU SERVIÇO
+// Exige foto de perfil antes de publicar.
 // =====================================================
 
-if (!isset($_SESSION["ID_USUARIO"])) {
-
-    header("Location: entrar.php");
-    exit;
-
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
+if (empty($_SESSION['ID_USUARIO'])) {
+    header('Location: entrar.php');
+    exit;
+}
+
+require_once __DIR__ . '/conexao.php';
+
+$id_usuario = (int) $_SESSION['ID_USUARIO'];
 
 // =====================================================
-// CONEXÃO COM O BANCO
+// VERIFICAR FOTO DO PROFISSIONAL
 // =====================================================
 
-include "conexao.php";
+$stmt_foto = mysqli_prepare(
+    $conexao,
+    'SELECT FOTO FROM USUARIO WHERE ID_USUARIO = ? LIMIT 1'
+);
 
+mysqli_stmt_bind_param(
+    $stmt_foto,
+    'i',
+    $id_usuario
+);
 
-// =====================================================
-// DADOS DO USUÁRIO
-// =====================================================
+mysqli_stmt_execute($stmt_foto);
 
-$id_usuario = $_SESSION["ID_USUARIO"];
-$nome_usuario = $_SESSION["NOME_USUARIO"];
+$dados_foto = mysqli_fetch_assoc(
+    mysqli_stmt_get_result($stmt_foto)
+);
 
+mysqli_stmt_close($stmt_foto);
 
-// =====================================================
-// MENSAGENS
-// =====================================================
+$foto_perfil = trim(
+    (string) ($dados_foto['FOTO'] ?? '')
+);
 
-$mensagem = "";
-$tipo_mensagem = "";
-
-
-// =====================================================
-// BAIRROS DE BAURU
-// =====================================================
-
-$bairros_bauru = [
-
-    "Altos da Cidade",
-    "Alto Paraíso",
-    "Bela Vista",
-    "Centro",
-    "Chácaras Cardoso",
-    "Chácaras Cornélia",
-    "Colina Verde",
-    "Distrito Industrial",
-    "Estoril",
-    "Ferradura Mirim",
-    "Higienópolis",
-
-    "Jardim América",
-    "Jardim Aeroporto",
-    "Jardim Bela Vista",
-    "Jardim Brasil",
-    "Jardim Carolina",
-    "Jardim Colonial",
-    "Jardim da Grama",
-    "Jardim Dona Sarah",
-    "Jardim Eldorado",
-    "Jardim Estoril",
-    "Jardim Eugênia",
-    "Jardim Ferraz",
-    "Jardim Gaivota",
-    "Jardim Giunta",
-    "Jardim Imperial",
-    "Jardim Infante Dom Henrique",
-    "Jardim Jussara",
-    "Jardim Marabá",
-    "Jardim Marambá",
-    "Jardim Marilu",
-    "Jardim Mary",
-    "Jardim Nicéia",
-    "Jardim Olímpico",
-    "Jardim Ouro Verde",
-    "Jardim Pagani",
-    "Jardim Panorama",
-    "Jardim Planalto",
-    "Jardim Redentor",
-    "Jardim Samambaia",
-    "Jardim Samburá",
-    "Jardim Santos Dumont",
-    "Jardim Shangri-lá",
-    "Jardim Solange",
-    "Jardim Terra Branca",
-    "Jardim Vânia Maria",
-    "Jardim Vitória",
-    "Jardim Vista Alegre",
-
-    "Leão XIII",
-    "Mary Dota",
-    "Nova Esperança",
-    "Núcleo Geisel",
-    "Núcleo Habitacional Joaquim Guilherme",
-    "Núcleo José Regino",
-    "Núcleo Luís Edmundo Coube",
-    "Núcleo Octávio Rasi",
-    "Núcleo Pastor Arlindo Lopes Viana",
-
-    "Parque Bauru",
-    "Parque das Nações",
-    "Parque das Orquídeas",
-    "Parque dos Flamboyants",
-    "Parque Santa Cândida",
-    "Parque Santa Edwirges",
-    "Parque Santa Terezinha",
-    "Parque Viaduto",
-
-    "Residencial Andorinhas",
-    "Residencial Granja Cecília",
-    "Residencial Lago Sul",
-    "Residencial Nova Bauru",
-    "Residencial Odete",
-    "Residencial Sabiás",
-    "Residencial Tavano",
-    "Residencial Villa Dumont",
-
-    "Santa Cândida",
-    "Santa Edwirges",
-    "Vale do Igapó",
-
-    "Vila Aeroporto",
-    "Vila Antártica",
-    "Vila Aviação",
-    "Vila Bela",
-    "Vila Cardia",
-    "Vila Cidade Universitária",
-    "Vila Coralina",
-    "Vila Dutra",
-    "Vila Falcão",
-    "Vila Giunta",
-    "Vila Industrial",
-    "Vila Independência",
-    "Vila Ipiranga",
-    "Vila Jardim Guadalajara",
-    "Vila Mesquita",
-    "Vila Nipônica",
-    "Vila Nova Cidade Universitária",
-    "Vila Pacífico",
-    "Vila Paraíso",
-    "Vila Perroca",
-    "Vila Santa Clara",
-    "Vila Santa Tereza",
-    "Vila Santista",
-    "Vila São Francisco",
-    "Vila Souto",
-    "Vila Universitária",
-    "Vila Zilo"
-
-];
-
-
-// Ordena alfabeticamente
-sort($bairros_bauru);
-
+// Se não tem foto, direciona para o cadastro da imagem.
+if (
+    !$dados_foto ||
+    $foto_perfil === '' ||
+    !is_file(__DIR__ . '/' . $foto_perfil)
+) {
+    header('Location: minha_foto.php?origem=anuncio');
+    exit;
+}
 
 // =====================================================
-// BAIRROS SELECIONADOS
+// DADOS DO PROFISSIONAL
 // =====================================================
 
-$bairros_selecionados = [];
+$nome_usuario = trim(
+    (string) ($_SESSION['NOME_USUARIO'] ?? 'Profissional')
+);
 
+$descricao = '';
+$erro_formulario = '';
 
-// =====================================================
-// ENVIO DO FORMULÁRIO
-// =====================================================
+$mensagem_sucesso = (string) (
+    $_SESSION['sucesso_anuncio'] ?? ''
+);
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+unset($_SESSION['sucesso_anuncio']);
 
-
-    // =================================================
-    // RECEBE OS DADOS
-    // =================================================
-
-    $descricao = trim(
-        $_POST["descricao"] ?? ""
+function escapar_anuncio($valor)
+{
+    return htmlspecialchars(
+        (string) ($valor ?? ''),
+        ENT_QUOTES,
+        'UTF-8'
     );
+}
 
-
-    $preco = trim(
-        $_POST["preco"] ?? ""
+if (empty($_SESSION['token_anuncio'])) {
+    $_SESSION['token_anuncio'] = bin2hex(
+        random_bytes(32)
     );
+}
 
+// =====================================================
+// PUBLICAR ANÚNCIO
+// =====================================================
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $bairros_post = $_POST["bairros"] ?? [];
+    $token = $_POST['token_anuncio'] ?? '';
 
+    $descricao_enviada = $_POST['descricao'] ?? '';
 
-    // =================================================
-    // GARANTE QUE BAIRROS SEJAM UM ARRAY
-    // =================================================
+    $descricao = is_string($descricao_enviada)
+        ? trim($descricao_enviada)
+        : '';
 
-    if (!is_array($bairros_post)) {
+    $tamanho = function_exists('mb_strlen')
+        ? mb_strlen($descricao, 'UTF-8')
+        : strlen($descricao);
 
-        $bairros_post = [];
+    if (
+        !is_string($token) ||
+        !hash_equals(
+            $_SESSION['token_anuncio'],
+            $token
+        )
+    ) {
 
-    }
+        $erro_formulario =
+            'O formulário expirou. Atualize a página e tente novamente.';
 
+    } elseif ($descricao === '') {
 
-    // =================================================
-    // VALIDA OS BAIRROS
-    // =================================================
+        $erro_formulario =
+            'Conte um pouco sobre sua faxina.';
 
-    foreach ($bairros_post as $bairro_item) {
+    } elseif ($tamanho > 1000) {
 
-        $bairro_item = trim($bairro_item);
+        $erro_formulario =
+            'A descrição pode ter até 1.000 caracteres.';
 
+    } else {
 
-        if (
-            !empty($bairro_item)
-            &&
-            in_array(
-                $bairro_item,
-                $bairros_bauru
-            )
-        ) {
+        try {
 
-            $bairros_selecionados[] =
-                $bairro_item;
+            // =========================================
+            // GARANTIR CATEGORIA FAXINA
+            // =========================================
 
-        }
-
-    }
-
-
-    // Remove bairros repetidos
-
-    $bairros_selecionados =
-        array_unique(
-            $bairros_selecionados
-        );
-
-
-    // =================================================
-    // VALIDAÇÃO
-    // =================================================
-
-    if (empty($descricao)) {
-
-        $mensagem =
-            "Conte um pouco sobre sua faxina.";
-
-        $tipo_mensagem =
-            "danger";
-
-    }
-
-
-    elseif (empty($bairros_selecionados)) {
-
-        $mensagem =
-            "Selecione pelo menos um bairro onde você atende.";
-
-        $tipo_mensagem =
-            "danger";
-
-    }
-
-    else {
-
-
-        // =================================================
-        // BUSCA A CATEGORIA FAXINA
-        // =================================================
-
-        $sql_categoria = "
-            SELECT ID_CATEGORIA
-            FROM CATEGORIA
-            WHERE NOME = 'Faxina'
-            LIMIT 1
-        ";
-
-
-        $resultado_categoria =
             mysqli_query(
                 $conexao,
-                $sql_categoria
+                "INSERT IGNORE INTO CATEGORIA
+                    (NOME, DESCRICAO, ATIVO)
+                 VALUES
+                    ('Faxina',
+                     'Serviços de limpeza residencial.',
+                     1)"
             );
 
+            $resultado = mysqli_query(
+                $conexao,
+                "SELECT ID_CATEGORIA
+                 FROM CATEGORIA
+                 WHERE NOME = 'Faxina'
+                 LIMIT 1"
+            );
 
-        // =================================================
-        // SE DEU ERRO NA CONSULTA
-        // =================================================
-
-        if (!$resultado_categoria) {
-
-            $mensagem =
-                "Não foi possível publicar seu serviço. Tente novamente.";
-
-            $tipo_mensagem =
-                "danger";
-
-        }
-
-        else {
-
-
-            $categoria =
-                mysqli_fetch_assoc(
-                    $resultado_categoria
-                );
-
-
-            // =================================================
-            // SE A CATEGORIA NÃO EXISTIR, CRIA AUTOMATICAMENTE
-            // =================================================
+            $categoria = mysqli_fetch_assoc(
+                $resultado
+            );
 
             if (!$categoria) {
-
-
-                $sql_criar_categoria = "
-                    INSERT INTO CATEGORIA
-                    (
-                        NOME,
-                        DESCRICAO,
-                        ATIVO
-                    )
-                    VALUES
-                    (
-                        'Faxina',
-                        'Serviços de limpeza residencial.',
-                        TRUE
-                    )
-                ";
-
-
-                $categoria_criada =
-                    mysqli_query(
-                        $conexao,
-                        $sql_criar_categoria
-                    );
-
-
-                if ($categoria_criada) {
-
-                    $id_categoria =
-                        mysqli_insert_id(
-                            $conexao
-                        );
-
-                }
-
-                else {
-
-                    $id_categoria =
-                        0;
-
-                }
-
+                throw new RuntimeException(
+                    'Categoria Faxina não encontrada.'
+                );
             }
 
-            else {
+            $id_categoria = (int) (
+                $categoria['ID_CATEGORIA']
+            );
 
-                $id_categoria =
-                    $categoria["ID_CATEGORIA"];
+            // =========================================
+            // TÍTULO AUTOMÁTICO
+            // =========================================
 
-            }
+            $nome_curto = function_exists('mb_substr')
+                ? mb_substr(
+                    $nome_usuario,
+                    0,
+                    141,
+                    'UTF-8'
+                )
+                : substr($nome_usuario, 0, 141);
 
+            $titulo = 'Faxina - ' . $nome_curto;
 
-            // =================================================
-            // VERIFICA SE CONSEGUIU A CATEGORIA
-            // =================================================
+            // =========================================
+            // INSERIR ANÚNCIO
+            // =========================================
 
-            if ($id_categoria <= 0) {
+            $sql = "
+                INSERT INTO ANUNCIO (
+                    ID_USUARIO,
+                    ID_CATEGORIA,
+                    TITULO,
+                    DESCRICAO,
+                    PRECO,
+                    ESTADO,
+                    CIDADE,
+                    BAIRRO,
+                    STATUS
+                )
+                VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    NULL,
+                    'SP',
+                    'Bauru',
+                    NULL,
+                    'ATIVO'
+                )
+            ";
 
-                $mensagem =
-                    "Não foi possível publicar seu serviço. Tente novamente.";
+            $stmt = mysqli_prepare(
+                $conexao,
+                $sql
+            );
 
-                $tipo_mensagem =
-                    "danger";
+            mysqli_stmt_bind_param(
+                $stmt,
+                'iiss',
+                $id_usuario,
+                $id_categoria,
+                $titulo,
+                $descricao
+            );
 
-            }
+            mysqli_stmt_execute($stmt);
 
-            else {
+            mysqli_stmt_close($stmt);
 
+            $_SESSION['sucesso_anuncio'] =
+                'Seu serviço foi publicado com sucesso!';
 
-                // =================================================
-                // TÍTULO AUTOMÁTICO
-                // =================================================
+            header('Location: cadastrar_anuncio.php');
+            exit;
 
-                $titulo =
-                    "Faxina - " . $nome_usuario;
+        } catch (Throwable $erro) {
 
+            error_log(
+                'LimpaLar - publicar anúncio: ' .
+                $erro->getMessage()
+            );
 
-                // =================================================
-                // FORMATA O VALOR
-                // =================================================
-
-// =================================================
-// PREÇO COMBINADO DIRETAMENTE COM O CLIENTE
-// =================================================
-
-$preco = null;
-
-
-                // =================================================
-                // JUNTA OS BAIRROS
-                // =================================================
-
-                $bairro =
-                    implode(
-                        ", ",
-                        $bairros_selecionados
-                    );
-
-
-               // =================================================
-// CADASTRA O ANÚNCIO
-// =================================================
-
-$sql = "
-    INSERT INTO ANUNCIO
-    (
-        ID_USUARIO,
-        ID_CATEGORIA,
-        TITULO,
-        DESCRICAO,
-        PRECO,
-        ESTADO,
-        CIDADE,
-        BAIRRO,
-        STATUS
-    )
-    VALUES
-    (
-        ?,
-        ?,
-        ?,
-        ?,
-        ?,
-        'SP',
-        'Bauru',
-        ?,
-        'ATIVO'
-    )
-";
-
-
-                $stmt =
-                    mysqli_prepare(
-                        $conexao,
-                        $sql
-                    );
-
-
-                // =================================================
-                // VERIFICA PREPARAÇÃO
-                // =================================================
-
-                if ($stmt) {
-
-
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iissds",
-                        $id_usuario,
-                        $id_categoria,
-                        $titulo,
-                        $descricao,
-                        $preco,
-                        $bairro
-                    );
-
-
-                    // =============================================
-                    // EXECUTA
-                    // =============================================
-
-                    if (
-                        mysqli_stmt_execute(
-                            $stmt
-                        )
-                    ) {
-
-
-                        $mensagem =
-                            "Seu serviço foi publicado com sucesso!";
-
-
-                        $tipo_mensagem =
-                            "success";
-
-
-                        // Limpa formulário
-
-                        $descricao =
-                            "";
-
-                        $preco =
-                            "";
-
-
-                        $bairros_selecionados =
-                            [];
-
-                    }
-
-                    else {
-
-
-                        $mensagem =
-                            "Não foi possível publicar seu serviço.";
-
-                        $tipo_mensagem =
-                            "danger";
-
-                    }
-
-
-                    mysqli_stmt_close(
-                        $stmt
-                    );
-
-                }
-
-                else {
-
-
-                    $mensagem =
-                        "Não foi possível preparar seu serviço.";
-
-                    $tipo_mensagem =
-                        "danger";
-
-                }
-
-            }
-
+            $erro_formulario =
+                'Não foi possível publicar o serviço. Confira o banco e tente novamente.';
         }
-
     }
-
 }
 
+include __DIR__ . '/cabecalho.php';
 ?>
-
-
-<?php include "cabecalho.php"; ?>
-
-
-<main>
 
 <section class="container py-5">
 
-
-    <!-- =================================================
-         CABEÇALHO
-    ================================================== -->
-
-    <div class="text-center mb-5">
+    <div class="text-center mb-4">
 
         <h1
             class="fw-bold"
-            style="color: #126E68;">
-
+            style="color:#126E68"
+        >
             🧹 Oferecer meu serviço
-
         </h1>
 
+        <p class="text-secondary">
 
-        <p
-            style="color: #617477;">
-
-            Cadastre sua faxina e informe onde você atende
-            em Bauru.
+            Apresente seu trabalho para os clientes
+            do LimpaLar em Bauru.
 
         </p>
 
     </div>
 
-
-
-    <!-- =================================================
-         MENSAGEM
-    ================================================== -->
-
-    <?php if (!empty($mensagem)) { ?>
-
-        <div
-            class="alert alert-<?php echo $tipo_mensagem; ?> text-center">
-
-            <?php
-            echo htmlspecialchars(
-                $mensagem
-            );
-            ?>
-
-        </div>
-
-    <?php } ?>
-
-
-
-    <!-- =================================================
-         FORMULÁRIO
-    ================================================== -->
-
     <div class="row justify-content-center">
 
         <div class="col-12 col-lg-8">
 
-            <div
-                class="card border-0 shadow-sm rounded-4">
+            <div class="card border-0 rounded-4 shadow-sm">
 
                 <div class="card-body p-4 p-md-5">
 
+                    <!-- MENSAGEM DE SUCESSO -->
 
-                    <!-- =================================================
-                         NOME DO PROFISSIONAL
-                    ================================================== -->
-
-                    <div
-                        class="text-center mb-5">
+                    <?php if ($mensagem_sucesso !== ''): ?>
 
                         <div
-                            class="fw-bold fs-4"
-                            style="color: #126E68;">
+                            class="alert alert-success"
+                            role="status"
+                        >
 
-                            <?php
-                            echo htmlspecialchars(
-                                $nome_usuario
-                            );
-                            ?>
+                            <?= escapar_anuncio(
+                                $mensagem_sucesso
+                            ) ?>
+
+                            <div class="mt-2">
+
+                                <a
+                                    href="profissionais.php"
+                                    class="alert-link"
+                                >
+                                    Ver profissionais e anúncios
+                                </a>
+
+                            </div>
 
                         </div>
 
+                    <?php endif; ?>
+
+                    <!-- MENSAGEM DE ERRO -->
+
+                    <?php if ($erro_formulario !== ''): ?>
 
                         <div
-                            class="small mt-1"
-                            style="color: #617477;">
-
-                            Serviço de faxina residencial
-
+                            class="alert alert-danger"
+                            role="alert"
+                        >
+                            <?= escapar_anuncio(
+                                $erro_formulario
+                            ) ?>
                         </div>
+
+                    <?php endif; ?>
+
+                    <!-- PROFISSIONAL -->
+
+                    <div class="text-center mb-4">
+
+                        <img
+                            src="<?= escapar_anuncio($foto_perfil) ?>"
+                            alt="Foto do profissional"
+                            class="rounded-circle mb-3"
+                            style="
+                                width:110px;
+                                height:110px;
+                                object-fit:cover;
+                            "
+                        >
+
+                        <h2
+                            class="h4 fw-bold"
+                            style="color:#126E68"
+                        >
+                            <?= escapar_anuncio($nome_usuario) ?>
+                        </h2>
+
+                        <p class="text-secondary mb-0">
+                            Serviço de limpeza residencial
+                        </p>
 
                     </div>
 
-
+                    <!-- FORMULÁRIO -->
 
                     <form
                         method="POST"
-                        id="formAnuncio">
+                        action="cadastrar_anuncio.php"
+                    >
 
+                        <input
+                            type="hidden"
+                            name="token_anuncio"
+                            value="<?= escapar_anuncio(
+                                $_SESSION['token_anuncio']
+                            ) ?>"
+                        >
 
-                        <!-- =================================================
-                             DESCRIÇÃO
-                        ================================================== -->
+                        <!-- DESCRIÇÃO -->
 
-                        <div class="mb-5">
+                        <div class="mb-4">
 
                             <label
                                 for="descricao"
-                                class="form-label fw-bold fs-5"
-                                style="color: #126E68;">
-
+                                class="form-label fw-bold"
+                                style="color:#126E68"
+                            >
                                 Fale sobre sua faxina
-
                             </label>
 
-
                             <textarea
-                                class="form-control"
                                 id="descricao"
                                 name="descricao"
                                 rows="6"
                                 maxlength="1000"
-                                placeholder="Conte como é o seu serviço, quais ambientes você costuma limpar e o que normalmente está incluso na faxina..."
-                                required><?php
+                                class="form-control"
+                                placeholder="Conte quais ambientes você costuma limpar, o que está incluído no serviço e como é seu trabalho..."
+                                required><?= escapar_anuncio($descricao) ?></textarea>
 
-                                echo htmlspecialchars(
-                                    $descricao ?? ""
-                                );
+                            <div class="form-text">
 
-                                ?></textarea>
-
-
-                            <div
-                                class="form-text mt-2">
-
-                                Conte para o cliente como é o seu trabalho.
+                                Esse texto será exibido para
+                                os clientes na página de
+                                profissionais.
 
                             </div>
 
                         </div>
 
+                        <!-- LOCAL -->
 
-<!-- =================================================
-     INFORMAÇÃO SOBRE O VALOR DO SERVIÇO
-================================================== -->
-
-<div
-    class="alert border-0 rounded-4 p-4 mb-5"
-    style="background:#E7F5F1;">
-
-    <h3
-        class="h5 fw-bold mb-2"
-        style="color:#126E68;">
-
-        💬 Valor combinado diretamente
-
-    </h3>
-
-    <p class="mb-0" style="color:#617477;">
-
-        Você não precisa definir um preço para
-        publicar seu serviço.
-
-        Quando um cliente solicitar uma faxina
-        e você aceitar, vocês poderão entrar em
-        contato para combinar o valor e os
-        detalhes do atendimento.
-
-    </p>
-
-</div>
-
-
-                        <!-- =================================================
-                             ÁREA DE ATENDIMENTO
-                        ================================================== -->
-
-                        <div class="mb-5">
+                        <div
+                            class="rounded-4 p-4 mb-4"
+                            style="background:#E7F5F1"
+                        >
 
                             <h3
-                                class="fw-bold mb-3"
-                                style="color: #126E68;">
-
-                                📍 Onde você atende?
-
+                                class="h5 fw-bold"
+                                style="color:#126E68"
+                            >
+                                📍 Atendimento em Bauru — SP
                             </h3>
 
-
                             <p
-                                class="mb-4"
-                                style="color: #617477;">
+                                class="mb-0"
+                                style="color:#617477"
+                            >
 
-                                Escolha os bairros de Bauru onde você
-                                realiza suas faxinas.
+                                Você não precisa selecionar bairros.
+
+                                Após aceitar uma solicitação,
+                                combine diretamente com o cliente
+                                o endereço, o deslocamento
+                                e os detalhes do serviço.
 
                             </p>
 
+                        </div>
 
+                        <!-- VALOR -->
 
+                        <div
+                            class="rounded-4 p-4 mb-4"
+                            style="background:#E7F5F1"
+                        >
 
+                            <h3
+                                class="h5 fw-bold"
+                                style="color:#126E68"
+                            >
+                                💬 Valor a combinar
+                            </h3>
 
-                                <div
-                                    id="resultadoCep"
-                                    class="form-text mt-2">
+                            <p
+                                class="mb-0"
+                                style="color:#617477"
+                            >
 
-                                    Digite um CEP de Bauru para encontrar
-                                    o bairro automaticamente.
+                                Não é necessário definir um
+                                preço agora.
 
-                                </div>
+                                O valor será combinado diretamente
+                                com o cliente depois que você
+                                aceitar a solicitação.
 
-                            </div>
-
-
-
-
-                            <!-- =================================================
-                                 PESQUISA
-                            ================================================== -->
-
-                            <div class="mb-3">
-
-                                <label
-                                    for="pesquisaBairro"
-                                    class="form-label">
-
-                                    Ou escolha o bairro
-
-                                </label>
-
-
-                                <input
-                                    type="text"
-                                    class="form-control"
-                                    id="pesquisaBairro"
-                                    placeholder="Digite o nome do bairro...">
-
-                            </div>
-
-
-
-                            <!-- =================================================
-                                 LISTA DE BAIRROS
-                            ================================================== -->
-
-                            <div
-                                id="listaBairros"
-                                class="border rounded-3"
-                                style="
-                                    max-height: 280px;
-                                    overflow-y: auto;
-                                ">
-
-
-                                <?php
-
-                                foreach (
-                                    $bairros_bauru
-                                    as $bairro_item
-                                ) {
-
-                                ?>
-
-                                    <label
-                                        class="bairro-item d-flex align-items-center gap-2 p-3 border-bottom"
-                                        style="cursor: pointer;">
-
-                                        <input
-                                            type="checkbox"
-                                            class="form-check-input bairro-checkbox"
-                                            name="bairros[]"
-                                            value="<?php
-
-                                            echo htmlspecialchars(
-                                                $bairro_item
-                                            );
-
-                                            ?>"
-                                            <?php
-
-                                            if (
-                                                in_array(
-                                                    $bairro_item,
-                                                    $bairros_selecionados
-                                                )
-                                            ) {
-
-                                                echo "checked";
-
-                                            }
-
-                                            ?>
-                                        >
-
-
-                                        <span>
-
-                                            <?php
-
-                                            echo htmlspecialchars(
-                                                $bairro_item
-                                            );
-
-                                            ?>
-
-                                        </span>
-
-                                    </label>
-
-                                <?php
-
-                                }
-
-                                ?>
-
-
-                            </div>
-
-
-
-                            <!-- =================================================
-                                 SELECIONADOS
-                            ================================================== -->
-
-                            <div class="mt-4">
-
-                                <div
-                                    class="fw-bold mb-2"
-                                    style="color: #126E68;">
-
-                                    Bairros selecionados
-
-                                </div>
-
-
-                                <div
-                                    id="bairrosSelecionados"
-                                    class="d-flex flex-wrap gap-2">
-
-                                </div>
-
-
-                                <div
-                                    id="nenhumBairro"
-                                    class="small text-secondary">
-
-                                    Nenhum bairro selecionado.
-
-                                </div>
-
-                            </div>
+                            </p>
 
                         </div>
 
-
-
-                        <!-- =================================================
-                             BAURU
-                        ================================================== -->
+                        <!-- BOTÕES -->
 
                         <div
-                            class="p-3 rounded-3 mb-5"
-                            style="
-                                background-color: #E7F5F1;
-                                color: #126E68;
-                            ">
-
-                            <strong>
-
-                                📍 Bauru - SP
-
-                            </strong>
-
-
-                            <div
-                                class="small mt-1">
-
-                                O LimpaLar atende atualmente somente
-                                a cidade de Bauru.
-
-                            </div>
-
-                        </div>
-
-
-
-                        <!-- =================================================
-                             BOTÕES
-                        ================================================== -->
-
-                        <div
-                            class="d-flex flex-column flex-md-row justify-content-center gap-3">
-
+                            class="d-flex flex-column flex-sm-row gap-3 justify-content-center"
+                        >
 
                             <a
                                 href="painel.php"
-                                class="btn btn-outline-secondary btn-lg px-4">
-
-                                Voltar
-
+                                class="btn btn-outline-secondary btn-lg"
+                            >
+                                Voltar ao painel
                             </a>
-
 
                             <button
                                 type="submit"
-                                class="btn btn-lg text-white px-5"
-                                style="
-                                    background-color: #18A999;
-                                    border-color: #18A999;
-                                ">
-
+                                class="btn btn-lg text-white"
+                                style="background:#18A999"
+                            >
                                 🧹 Publicar meu serviço
-
                             </button>
 
-
                         </div>
-
 
                     </form>
 
@@ -981,195 +492,4 @@ $sql = "
 
 </main>
 
-
-
-<!-- =====================================================
-     JAVASCRIPT
-====================================================== -->
-
-<script>
-
-
-
-        // =================================================
-        // PESQUISA DE BAIRRO
-        // =================================================
-
-        pesquisaBairro.addEventListener(
-            "input",
-            function () {
-
-
-                const pesquisa =
-                    this.value
-                    .toLowerCase()
-                    .trim();
-
-
-                listaBairros.forEach(
-                    function (item) {
-
-
-                        const nome =
-                            item.innerText
-                            .toLowerCase();
-
-
-                        if (
-                            nome.includes(
-                                pesquisa
-                            )
-                        ) {
-
-                            item.style.display =
-                                "flex";
-
-                        }
-
-                        else {
-
-                            item.style.display =
-                                "none";
-
-                        }
-
-                    }
-                );
-
-            }
-        );
-
-
-
-        // =================================================
-        // ATUALIZA BAIRROS SELECIONADOS
-        // =================================================
-
-        function atualizarBairrosSelecionados() {
-
-
-            bairrosSelecionados.innerHTML =
-                "";
-
-
-            let quantidade = 0;
-
-
-            checkboxes.forEach(
-                function (checkbox) {
-
-
-                    if (checkbox.checked) {
-
-
-                        quantidade++;
-
-
-                        const etiqueta =
-                            document.createElement(
-                                "span"
-                            );
-
-
-                        etiqueta.className =
-                            "badge rounded-pill px-3 py-2";
-
-
-                        etiqueta.style.backgroundColor =
-                            "#E7F5F1";
-
-
-                        etiqueta.style.color =
-                            "#126E68";
-
-
-                        etiqueta.innerHTML =
-                            checkbox.value
-                            + " &times;";
-
-
-                        etiqueta.style.cursor =
-                            "pointer";
-
-
-                        etiqueta.title =
-                            "Clique para remover";
-
-
-                        etiqueta.addEventListener(
-                            "click",
-                            function () {
-
-
-                                checkbox.checked =
-                                    false;
-
-
-                                atualizarBairrosSelecionados();
-
-                            }
-                        );
-
-
-                        bairrosSelecionados.appendChild(
-                            etiqueta
-                        );
-
-                    }
-
-                }
-            );
-
-
-            if (quantidade === 0) {
-
-                nenhumBairro.style.display =
-                    "block";
-
-            }
-
-            else {
-
-                nenhumBairro.style.display =
-                    "none";
-
-            }
-
-        }
-
-
-
-        // =================================================
-        // CHECKBOX
-        // =================================================
-
-        checkboxes.forEach(
-            function (checkbox) {
-
-
-                checkbox.addEventListener(
-                    "change",
-                    atualizarBairrosSelecionados
-                );
-
-            }
-        );
-
-
-
-
-
-        // =================================================
-        // INICIA
-        // =================================================
-
-        atualizarBairrosSelecionados();
-
-    }
-);
-
-</script>
-
-
-
-<?php include "rodape.php"; ?>
+<?php include __DIR__ . '/rodape.php'; ?>

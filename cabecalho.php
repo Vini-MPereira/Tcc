@@ -3,8 +3,8 @@
 // =====================================================
 // LIMPA LAR - CABEÇALHO COMPARTILHADO
 // =====================================================
-// Este arquivo abre <main>. Cada página fecha </main>
-// antes de incluir rodape.php.
+// Este arquivo abre <main>.
+// Cada página fecha </main> antes do rodape.php.
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -23,7 +23,7 @@ $qtd_avaliacoes = 0;
 $notificacoes_disponiveis = true;
 
 // =====================================================
-// CONTADORES E AVALIAÇÃO OBRIGATÓRIA
+// CONTAR NOTIFICAÇÕES
 // =====================================================
 
 if ($usuario_logado) {
@@ -76,7 +76,6 @@ if ($usuario_logado) {
         $qtd_avaliacoes =
             (int) ($contadores['avaliacoes'] ?? 0);
 
-        // Exige avaliação antes de continuar navegando.
         if (
             $qtd_avaliacoes > 0 &&
             $pagina_atual !== 'avaliacoes.php'
@@ -97,8 +96,7 @@ if ($usuario_logado) {
     }
 }
 
-$total_notificacoes =
-    $qtd_solicitacoes + $qtd_avaliacoes;
+$total_notificacoes = $qtd_solicitacoes + $qtd_avaliacoes;
 
 function escapar_cabecalho($valor)
 {
@@ -115,20 +113,20 @@ function escapar_cabecalho($valor)
 
 <head>
     <meta charset="UTF-8">
-
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0">
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>LimpaLar</title>
 
     <link
         rel="stylesheet"
-        href="bootstrap/css/bootstrap.css">
+        href="bootstrap/css/bootstrap.css"
+    >
 
     <style>
         :root {
-            /* Compatibilidade com outras páginas */
             --azul-principal: #18A999;
             --azul-escuro: #164E63;
             --azul-claro: #E7F6F3;
@@ -136,7 +134,6 @@ function escapar_cabecalho($valor)
             --texto-secundario: #617477;
             --fundo: #F4F9F7;
 
-            /* Identidade visual do cabeçalho */
             --ll-verde-escuro: #126E68;
             --ll-verde: #18A999;
             --ll-verde-claro: #E7F5F1;
@@ -285,17 +282,100 @@ function escapar_cabecalho($valor)
             }
 
             .limpalar-header .nome-site {
-                font-size: 1.1rem;
+                font-size: 1.05rem;
             }
 
             .limpalar-header .logo-limpalar {
-                width: 48px;
-                height: 47px;
+                width: 42px;
+                height: 42px;
+            }
+
+            .limpalar-header .navbar-brand {
+                min-width: 0;
+                margin-right: 4px !important;
+            }
+
+            .limpalar-header .navbar-brand > span {
+                min-width: 0;
+            }
+
+            .limpalar-header .btn-sino {
+                width: 38px;
+                height: 38px;
+                padding: 5px;
+            }
+
+            .limpalar-header .navbar-toggler {
+                padding: 5px 8px;
             }
 
             .limpalar-header .botao-conta {
                 padding-left: 9px;
                 padding-right: 9px;
+            }
+
+            /* Menu do sininho centralizado */
+            .limpalar-header .menu-notificacoes {
+                position: fixed !important;
+                inset: 72px 12px auto 12px !important;
+                transform: none !important;
+                width: auto !important;
+                max-width: none !important;
+                box-sizing: border-box;
+                max-height: calc(100dvh - 90px);
+                overflow-y: auto;
+                overflow-x: hidden;
+                border-radius: 16px;
+                z-index: 1050;
+            }
+
+            .limpalar-header .menu-notificacoes .dropdown-item {
+                white-space: normal;
+                overflow-wrap: anywhere;
+                max-width: 100%;
+            }
+
+            .limpalar-header .botao-conta + .dropdown-menu {
+                max-width: calc(100vw - 24px);
+            }
+
+            /* Notificação flutuante */
+            .toast-container {
+                left: 12px !important;
+                right: 12px !important;
+                bottom: 12px !important;
+                width: auto !important;
+                max-width: calc(100vw - 24px) !important;
+                padding: 0 !important;
+            }
+
+            .toast-container .toast {
+                width: 100%;
+                max-width: 100%;
+                overflow-wrap: anywhere;
+            }
+
+            .aviso-painel {
+                max-width: 100%;
+                min-width: 0;
+                text-align: center;
+                justify-content: center !important;
+            }
+
+            .aviso-painel > div {
+                flex: 1 1 100%;
+                min-width: 0;
+                overflow-wrap: anywhere;
+            }
+
+            .aviso-painel .btn {
+                max-width: 100%;
+                white-space: normal;
+            }
+
+            main .card {
+                max-width: 100%;
+                min-width: 0;
             }
         }
     </style>
@@ -304,180 +384,147 @@ function escapar_cabecalho($valor)
 <body>
 
 <header class="limpalar-header">
-
     <nav
         class="navbar navbar-expand-xl border-bottom shadow-sm"
-        aria-label="Navegação principal">
-
+        aria-label="Navegação principal"
+    >
         <div class="container-fluid px-3 px-lg-4">
 
             <!-- LOGO -->
-
             <a class="navbar-brand me-2" href="index.php">
-
                 <img
                     src="img/logo.png"
                     alt="Logo LimpaLar"
-                    class="logo-limpalar">
+                    class="logo-limpalar"
+                >
 
                 <span>
                     <span class="d-block fw-bold nome-site">
                         LimpaLar
                     </span>
-
                     <small class="slogan">
                         Cuidado que transforma seu lar
                     </small>
                 </span>
-
             </a>
 
-            <!-- NOTIFICAÇÕES, CONTA E MENU MOBILE -->
-
+            <!-- SININHO, CONTA E MENU MOBILE -->
             <div
-                class="d-flex align-items-center gap-2 ms-auto order-xl-3 ms-xl-3">
+                class="d-flex align-items-center gap-2 ms-auto order-xl-3 ms-xl-3"
+            >
 
                 <?php if ($usuario_logado): ?>
 
-                    <!-- SINO DE NOTIFICAÇÕES -->
-
+                    <!-- NOTIFICAÇÕES -->
                     <div class="dropdown">
-
                         <button
                             class="btn btn-sino position-relative"
                             type="button"
                             id="botaoNotificacoes"
                             data-bs-toggle="dropdown"
                             aria-expanded="false"
-                            aria-label="Notificações">
-
+                            aria-label="Notificações"
+                        >
                             <span aria-hidden="true">🔔</span>
 
                             <span
                                 id="badgeNotificacoes"
-                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger sino-badge <?= $total_notificacoes === 0 ? 'd-none' : ''; ?>">
-
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger sino-badge <?= $total_notificacoes === 0 ? 'd-none' : ''; ?>"
+                            >
                                 <?= $total_notificacoes; ?>
-
                             </span>
-
                         </button>
 
                         <ul
                             class="dropdown-menu dropdown-menu-end menu-notificacoes p-2 shadow border-0"
-                            aria-labelledby="botaoNotificacoes">
-
+                            aria-labelledby="botaoNotificacoes"
+                        >
                             <li>
                                 <h6
                                     class="dropdown-header fw-bold"
-                                    style="color:#126E68;">
-
+                                    style="color:#126E68;"
+                                >
                                     Suas notificações
-
                                 </h6>
                             </li>
 
-                            <!-- NOVAS SOLICITAÇÕES -->
-
                             <li
                                 id="itemNovaSolicitacao"
-                                class="<?= $qtd_solicitacoes === 0 ? 'd-none' : ''; ?>">
-
+                                class="<?= $qtd_solicitacoes === 0 ? 'd-none' : ''; ?>"
+                            >
                                 <a
                                     class="dropdown-item rounded-3 py-2"
-                                    href="concluir_faxina.php?aba=recebi">
-
+                                    href="concluir_faxina.php?aba=recebi"
+                                >
                                     <strong>
                                         🧹 Solicitações recebidas
                                     </strong>
 
                                     <small
                                         class="d-block text-secondary"
-                                        id="textoNovasSolicitacoes">
-
-                                        <?= $qtd_solicitacoes; ?>
-                                        aguardando resposta
-
+                                        id="textoNovasSolicitacoes"
+                                    >
+                                        <?= $qtd_solicitacoes; ?> aguardando resposta
                                     </small>
-
                                 </a>
-
                             </li>
-
-                            <!-- AVALIAÇÕES PENDENTES -->
 
                             <li
                                 id="itemAvaliacaoPendente"
-                                class="<?= $qtd_avaliacoes === 0 ? 'd-none' : ''; ?>">
-
+                                class="<?= $qtd_avaliacoes === 0 ? 'd-none' : ''; ?>"
+                            >
                                 <a
                                     class="dropdown-item rounded-3 py-2"
-                                    href="avaliacoes.php">
-
+                                    href="avaliacoes.php"
+                                >
                                     <strong>
                                         ⭐ Avaliações pendentes
                                     </strong>
 
                                     <small
                                         class="d-block text-secondary"
-                                        id="textoAvaliacoesPendentes">
-
-                                        <?= $qtd_avaliacoes; ?>
-                                        aguardando sua nota
-
+                                        id="textoAvaliacoesPendentes"
+                                    >
+                                        <?= $qtd_avaliacoes; ?> aguardando sua nota
                                     </small>
-
                                 </a>
-
                             </li>
-
-                            <!-- NENHUMA NOTIFICAÇÃO -->
 
                             <li
                                 id="semNotificacoes"
-                                class="px-3 py-2 text-secondary small <?= ($total_notificacoes > 0 || !$notificacoes_disponiveis) ? 'd-none' : ''; ?>">
-
+                                class="px-3 py-2 text-secondary small <?= ($total_notificacoes > 0 || !$notificacoes_disponiveis) ? 'd-none' : ''; ?>"
+                            >
                                 Nenhuma pendência por enquanto. ✅
-
                             </li>
 
                             <?php if (!$notificacoes_disponiveis): ?>
-
                                 <li
                                     id="erroNotificacoes"
-                                    class="px-3 py-2 text-danger small">
-
+                                    class="px-3 py-2 text-danger small"
+                                >
                                     Não foi possível consultar as notificações.
-
                                 </li>
-
                             <?php endif; ?>
-
                         </ul>
-
                     </div>
 
-                    <!-- MENU DA CONTA -->
-
+                    <!-- CONTA -->
                     <div class="dropdown">
-
                         <button
                             class="btn botao-conta dropdown-toggle"
                             type="button"
                             data-bs-toggle="dropdown"
-                            aria-expanded="false">
-
+                            aria-expanded="false"
+                        >
                             <span aria-hidden="true">👤</span>
-
                             <span class="d-none d-md-inline ms-1">
                                 <?= escapar_cabecalho($primeiro_nome); ?>
                             </span>
-
                         </button>
 
                         <ul
-                            class="dropdown-menu dropdown-menu-end shadow border-0">
-
+                            class="dropdown-menu dropdown-menu-end shadow border-0"
+                        >
                             <li>
                                 <span class="dropdown-header">
                                     Olá, <?= escapar_cabecalho($primeiro_nome); ?>!
@@ -491,7 +538,10 @@ function escapar_cabecalho($valor)
                             </li>
 
                             <li>
-                                <a class="dropdown-item" href="concluir_faxina.php">
+                                <a
+                                    class="dropdown-item"
+                                    href="concluir_faxina.php"
+                                >
                                     Minhas faxinas
                                 </a>
                             </li>
@@ -507,39 +557,35 @@ function escapar_cabecalho($valor)
                             </li>
 
                             <li>
-                                <a class="dropdown-item text-danger" href="sair.php">
+                                <a
+                                    class="dropdown-item text-danger"
+                                    href="sair.php"
+                                >
                                     Sair da conta
                                 </a>
                             </li>
-
                         </ul>
-
                     </div>
 
                 <?php else: ?>
 
-                    <!-- USUÁRIO NÃO LOGADO -->
-
                     <a
                         href="entrar.php"
-                        class="btn btn-contorno d-none d-sm-inline-block">
-
+                        class="btn btn-contorno d-none d-sm-inline-block"
+                    >
                         Entrar
-
                     </a>
 
                     <a
                         href="cadastrar.php"
-                        class="btn btn-primario d-none d-sm-inline-block">
-
+                        class="btn btn-primario d-none d-sm-inline-block"
+                    >
                         Cadastrar
-
                     </a>
 
                 <?php endif; ?>
 
                 <!-- MENU HAMBÚRGUER -->
-
                 <button
                     class="navbar-toggler"
                     type="button"
@@ -547,102 +593,82 @@ function escapar_cabecalho($valor)
                     data-bs-target="#menuPrincipal"
                     aria-controls="menuPrincipal"
                     aria-expanded="false"
-                    aria-label="Abrir menu">
-
+                    aria-label="Abrir menu"
+                >
                     <span class="navbar-toggler-icon"></span>
-
                 </button>
 
             </div>
 
             <!-- MENU PRINCIPAL -->
-
             <div
                 class="collapse navbar-collapse order-xl-2"
-                id="menuPrincipal">
-
+                id="menuPrincipal"
+            >
                 <ul class="navbar-nav mx-auto mb-2 mb-xl-0 gap-xl-1">
 
                     <li class="nav-item">
-
                         <a
                             href="index.php"
                             class="nav-link menu-link <?= $pagina_atual === 'index.php' ? 'active' : ''; ?>"
-                            <?= $pagina_atual === 'index.php' ? 'aria-current="page"' : ''; ?>>
-
+                            <?= $pagina_atual === 'index.php' ? 'aria-current="page"' : ''; ?>
+                        >
                             Início
-
                         </a>
-
                     </li>
 
                     <li class="nav-item">
-
                         <a
                             href="profissionais.php"
                             class="nav-link menu-link <?= $pagina_atual === 'profissionais.php' ? 'active' : ''; ?>"
-                            <?= $pagina_atual === 'profissionais.php' ? 'aria-current="page"' : ''; ?>>
-
+                            <?= $pagina_atual === 'profissionais.php' ? 'aria-current="page"' : ''; ?>
+                        >
                             Profissionais
-
                         </a>
-
                     </li>
 
                     <?php if ($usuario_logado): ?>
 
                         <li class="nav-item">
-
                             <a
                                 href="painel.php"
                                 class="nav-link menu-link <?= $pagina_atual === 'painel.php' ? 'active' : ''; ?>"
-                                <?= $pagina_atual === 'painel.php' ? 'aria-current="page"' : ''; ?>>
-
+                                <?= $pagina_atual === 'painel.php' ? 'aria-current="page"' : ''; ?>
+                            >
                                 Meu painel
-
                             </a>
-
                         </li>
 
                         <li class="nav-item">
-
                             <a
                                 href="concluir_faxina.php"
                                 class="nav-link menu-link <?= $pagina_atual === 'concluir_faxina.php' ? 'active' : ''; ?>"
-                                <?= $pagina_atual === 'concluir_faxina.php' ? 'aria-current="page"' : ''; ?>>
-
+                                <?= $pagina_atual === 'concluir_faxina.php' ? 'aria-current="page"' : ''; ?>
+                            >
                                 Minhas faxinas
-
                             </a>
-
                         </li>
 
                         <li class="nav-item">
-
                             <a
                                 href="avaliacoes.php"
                                 class="nav-link menu-link <?= $pagina_atual === 'avaliacoes.php' ? 'active' : ''; ?>"
-                                <?= $pagina_atual === 'avaliacoes.php' ? 'aria-current="page"' : ''; ?>>
-
+                                <?= $pagina_atual === 'avaliacoes.php' ? 'aria-current="page"' : ''; ?>
+                            >
                                 Avaliações
-
                             </a>
-
                         </li>
 
                     <?php endif; ?>
 
                     <li class="nav-item">
-
                         <a
                             href="suporte.php"
                             class="nav-link menu-link <?= $pagina_atual === 'suporte.php' ? 'active' : ''; ?>"
-                            <?= $pagina_atual === 'suporte.php' ? 'aria-current="page"' : ''; ?>>
-
+                            <?= $pagina_atual === 'suporte.php' ? 'aria-current="page"' : ''; ?>
+                        >
                             Suporte
-
                         </a>
-
                     </li>
 
                     <?php if (!$usuario_logado): ?>
@@ -650,37 +676,32 @@ function escapar_cabecalho($valor)
                         <li class="nav-item d-sm-none">
                             <a
                                 href="entrar.php"
-                                class="nav-link menu-link">
-
+                                class="nav-link menu-link"
+                            >
                                 Entrar
-
                             </a>
                         </li>
 
                         <li class="nav-item d-sm-none">
                             <a
                                 href="cadastrar.php"
-                                class="nav-link menu-link">
-
+                                class="nav-link menu-link"
+                            >
                                 Cadastrar
-
                             </a>
                         </li>
 
                     <?php endif; ?>
 
                 </ul>
-
             </div>
 
         </div>
-
     </nav>
-
 </header>
 
 <!-- =====================================================
-     ATUALIZAÇÃO AUTOMÁTICA DAS NOTIFICAÇÕES
+     NOTIFICAÇÕES AUTOMÁTICAS
 ====================================================== -->
 
 <?php if ($usuario_logado): ?>
@@ -690,14 +711,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const paginaAtual = <?= json_encode(
         $pagina_atual,
-        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+        JSON_HEX_TAG | JSON_HEX_AMP |
+        JSON_HEX_APOS | JSON_HEX_QUOT
     ); ?>;
 
-    let pendentesAnteriores = <?= $qtd_avaliacoes; ?>;
+    let anteriores = {
+        solicitacoes: <?= (int) $qtd_solicitacoes; ?>,
+        avaliacoes: <?= (int) $qtd_avaliacoes; ?>
+    };
+
     let consultando = false;
+    let tempoAviso = null;
 
-    // ATUALIZA OS CONTADORES E O MENU
-
+    // ATUALIZA O SININHO E SEUS CONTADORES
     function atualizarContadores(solicitacoes, avaliacoes) {
 
         const total = solicitacoes + avaliacoes;
@@ -706,52 +732,137 @@ document.addEventListener('DOMContentLoaded', function () {
             'badgeNotificacoes'
         );
 
-        badge.textContent = total > 99
-            ? '99+'
-            : String(total);
-
-        badge.classList.toggle(
-            'd-none',
-            total === 0
-        );
-
-        document.getElementById(
+        const itemSolicitacao = document.getElementById(
             'itemNovaSolicitacao'
-        ).classList.toggle(
-            'd-none',
-            solicitacoes === 0
         );
 
-        document.getElementById(
+        const textoSolicitacao = document.getElementById(
             'textoNovasSolicitacoes'
-        ).textContent =
-            `${solicitacoes} aguardando resposta`;
+        );
 
-        document.getElementById(
+        const itemAvaliacao = document.getElementById(
             'itemAvaliacaoPendente'
-        ).classList.toggle(
-            'd-none',
-            avaliacoes === 0
         );
 
-        document.getElementById(
+        const textoAvaliacao = document.getElementById(
             'textoAvaliacoesPendentes'
-        ).textContent =
-            `${avaliacoes} aguardando sua nota`;
-
-        document.getElementById(
-            'semNotificacoes'
-        ).classList.toggle(
-            'd-none',
-            total !== 0
         );
+
+        const vazio = document.getElementById(
+            'semNotificacoes'
+        );
+
+        if (badge) {
+            badge.textContent = total > 99
+                ? '99+'
+                : String(total);
+
+            badge.classList.toggle(
+                'd-none',
+                total === 0
+            );
+        }
+
+        if (itemSolicitacao) {
+            itemSolicitacao.classList.toggle(
+                'd-none',
+                solicitacoes === 0
+            );
+        }
+
+        if (textoSolicitacao) {
+            textoSolicitacao.textContent =
+                `${solicitacoes} aguardando resposta`;
+        }
+
+        if (itemAvaliacao) {
+            itemAvaliacao.classList.toggle(
+                'd-none',
+                avaliacoes === 0
+            );
+        }
+
+        if (textoAvaliacao) {
+            textoAvaliacao.textContent =
+                `${avaliacoes} aguardando sua nota`;
+        }
+
+        if (vazio) {
+            vazio.classList.toggle(
+                'd-none',
+                total !== 0
+            );
+        }
     }
 
-    // CONSULTA O BANCO PELO ENDPOINT DO PAINEL
+    // AVISO FLUTUANTE DE NOVA SOLICITAÇÃO
+    function mostrarNovaSolicitacao() {
 
+        // O painel já tem seu próprio aviso.
+        if (paginaAtual === 'painel.php') {
+            return;
+        }
+
+        let aviso = document.getElementById(
+            'avisoNovaSolicitacaoLL'
+        );
+
+        if (!aviso) {
+
+            aviso = document.createElement('div');
+
+            aviso.id = 'avisoNovaSolicitacaoLL';
+
+            aviso.className =
+                'alert alert-success shadow border-0';
+
+            aviso.setAttribute('role', 'status');
+
+            aviso.style.cssText = `
+                position: fixed;
+                top: 88px;
+                left: 12px;
+                right: 12px;
+                max-width: 440px;
+                margin: 0 auto;
+                z-index: 2000;
+                box-sizing: border-box;
+                overflow-wrap: anywhere;
+                border-radius: 14px;
+                text-align: center;
+            `;
+
+            aviso.innerHTML = `
+                <strong>🔔 Nova solicitação de faxina!</strong>
+
+                <div class="small mt-1 mb-2">
+                    Você recebeu um novo pedido.
+                </div>
+
+                <a
+                    href="concluir_faxina.php?aba=recebi"
+                    class="btn btn-success btn-sm"
+                >
+                    Ver solicitação
+                </a>
+            `;
+
+            document.body.appendChild(aviso);
+        }
+
+        aviso.classList.remove('d-none');
+
+        clearTimeout(tempoAviso);
+
+        tempoAviso = setTimeout(function () {
+            aviso.classList.add('d-none');
+        }, 8000);
+    }
+
+    // CONSULTAR NOTIFICAÇÕES NO SERVIDOR
     async function atualizarNotificacoes() {
 
-        if (consultando || document.hidden) {
+        if (consultando) {
             return;
         }
 
@@ -795,75 +906,82 @@ document.addEventListener('DOMContentLoaded', function () {
                 avaliacoes
             );
 
-            const erroNotificacoes = document.getElementById(
-                'erroNotificacoes'
-            );
-
-            if (erroNotificacoes) {
-                erroNotificacoes.classList.add('d-none');
+            // MOSTRAR AVISO DE NOVO PEDIDO
+            if (
+                solicitacoes > anteriores.solicitacoes
+            ) {
+                mostrarNovaSolicitacao();
             }
 
-            // REDIRECIONA QUANDO AVALIAÇÃO FOR OBRIGATÓRIA
-
+            // AVALIAÇÃO OBRIGATÓRIA
             if (
                 avaliacoes > 0 &&
                 paginaAtual !== 'avaliacoes.php'
             ) {
-
                 window.location.replace(
                     'avaliacoes.php'
                 );
-
                 return;
             }
 
-            // RECARREGA A TELA DE AVALIAÇÕES SE CHEGAR
-            // UMA NOVA PENDÊNCIA SEM FORMULÁRIO ABERTO.
-
             if (
                 paginaAtual === 'avaliacoes.php' &&
-                pendentesAnteriores === 0 &&
+                anteriores.avaliacoes === 0 &&
                 avaliacoes > 0 &&
                 !document.getElementById('formAvaliacao')
             ) {
-
                 window.location.reload();
                 return;
             }
 
-            pendentesAnteriores = avaliacoes;
+            anteriores = {
+                solicitacoes,
+                avaliacoes
+            };
+
+            const erro = document.getElementById(
+                'erroNotificacoes'
+            );
+
+            if (erro) {
+                erro.classList.add('d-none');
+            }
 
         } catch (erro) {
 
             console.warn(
-                'Falha ao atualizar as notificações do LimpaLar.',
+                'Falha na consulta das notificações:',
                 erro
             );
 
         } finally {
 
             consultando = false;
-
         }
     }
 
-    // VERIFICA A CADA 10 SEGUNDOS.
+    // PRIMEIRA CONSULTA IMEDIATA
+    atualizarNotificacoes();
 
+    // NOVA CONSULTA A CADA 3 SEGUNDOS
     setInterval(
         atualizarNotificacoes,
-        10000
+        3000
     );
 
-    // VERIFICA AO VOLTAR PARA A ABA DO NAVEGADOR.
-
+    // VERIFICAR AO VOLTAR PARA A ABA
     document.addEventListener(
         'visibilitychange',
         function () {
-
             if (!document.hidden) {
                 atualizarNotificacoes();
             }
         }
+    );
+
+    window.addEventListener(
+        'focus',
+        atualizarNotificacoes
     );
 
 });

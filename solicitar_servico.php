@@ -1,48 +1,65 @@
 
 <?php
-// LIMPA LAR - SOLICITAÇÃO POR PERÍODOS
-
-ob_start();
+// =====================================================
+// LIMPA LAR - SOLICITAR SERVIÇO
+// Manhã: 06h–12h | Tarde: 13h–17h
+// Limite para solicitar para hoje: 14h.
+// Solicitações canceladas ou recusadas liberam a vaga.
+// =====================================================
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+date_default_timezone_set('America/Sao_Paulo');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-date_default_timezone_set('America/Sao_Paulo');
-
-// RESPOSTA JSON
-
-function responder_periodo(
+function resposta_servico(
     bool $sucesso,
     string $mensagem,
     int $codigo = 200
 ): void {
-
-    if (ob_get_level() > 0) {
-        ob_clean();
-    }
-
     http_response_code($codigo);
 
-    echo json_encode([
-        'sucesso' => $sucesso,
-        'mensagem' => $mensagem
-    ], JSON_UNESCAPED_UNICODE);
+    echo json_encode(
+        [
+            'sucesso' => $sucesso,
+            'mensagem' => $mensagem
+        ],
+        JSON_UNESCAPED_UNICODE
+    );
 
     exit;
 }
 
-// VALIDAÇÃO DA REQUISIÇÃO
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    responder_periodo(false, 'Método não permitido.', 405);
+function texto_servico($valor): string
+{
+    return is_string($valor) ? trim($valor) : '';
 }
 
-if (empty($_SESSION['ID_USUARIO'])) {
-    responder_periodo(false, 'Faça login para continuar.', 401);
+// =====================================================
+// VERIFICAÇÃO DE LOGIN
+// =====================================================
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Allow: POST');
+    resposta_servico(false, 'Método não permitido.', 405);
+}
+
+$id_cliente = filter_var(
+    $_SESSION['ID_USUARIO'] ?? null,
+    FILTER_VALIDATE_INT,
+    ['options' => ['min_range' => 1]]
+);
+
+if (!$id_cliente) {
+    resposta_servico(
+        false,
+        'Entre na sua conta para solicitar uma faxina.',
+        401
+    );
 }
 
 if (
@@ -51,68 +68,109 @@ if (
         'application/json'
     ) === false
 ) {
-    responder_periodo(false, 'Envie os dados em JSON.', 415);
+    resposta_servico(false, 'Formato de envio inválido.', 415);
 }
 
-$entrada = json_decode(
+$dados = json_decode(
     file_get_contents('php://input'),
     true
 );
 
-if (!is_array($entrada)) {
-    responder_periodo(false, 'Dados inválidos.', 400);
+if (!is_array($dados)) {
+    resposta_servico(false, 'Dados inválidos.', 400);
 }
 
-// DADOS RECEBIDOS
-
-$id_cliente = (int)$_SESSION['ID_USUARIO'];
+// =====================================================
+// RECEBER DADOS DO FORMULÁRIO
+// =====================================================
 
 $id_anuncio = filter_var(
-    $entrada['id_anuncio'] ?? null,
-    FILTER_VALIDATE_INT
+    $dados['id_anuncio'] ?? null,
+    FILTER_VALIDATE_INT,
+    ['options' => ['min_range' => 1]]
 );
 
-$data = (string)($entrada['data_servico'] ?? '');
-
-$periodo = (string)(
-    $entrada['periodo_servico'] ?? ''
-);
-
-$endereco = trim((string)(
-    $entrada['endereco_servico'] ?? ''
-));
-
-$numero = trim((string)(
-    $entrada['numero_servico'] ?? ''
-));
-
-$bairro = trim((string)(
-    $entrada['bairro_servico'] ?? ''
-));
-
-$observacao = trim((string)(
-    $entrada['observacao'] ?? ''
-));
-
-// PERÍODOS FIXOS
-
-$periodos = [
-    'MANHA' => ['06:00', '12:00'],
-    'TARDE' => ['13:00', '17:00']
-];
-
-if (!$id_anuncio || !isset($periodos[$periodo])) {
-    responder_periodo(
-        false,
-        'Selecione um anúncio e um período.',
-        422
-    );
+if (!$id_anuncio) {
+    resposta_servico(false, 'Anúncio inválido.', 400);
 }
 
+$data_servico = texto_servico(
+    $dados['data_servico'] ?? ''
+);
+
+$periodo = strtoupper(
+    texto_servico($dados['periodo_servico'] ?? '')
+);
+
+// Compatibilidade com a versão que envia hora_servico.
+if ($periodo === '') {
+
+    $hora_recebida = texto_servico(
+        $dados['hora_servico'] ?? ''
+    );
+
+    if (
+        in_array(
+            $hora_recebida,
+            ['06:00', '06:00:00'],
+            true
+        )
+    ) {
+        $periodo = 'MANHA';
+
+    } elseif (
+        in_array(
+            $hora_recebida,
+            ['13:00', '13:00:00'],
+            true
+        )
+    ) {
+        $periodo = 'TARDE';
+    }
+}
+
+if (!in_array($periodo, ['MANHA', 'TARDE'], true)) {
+    resposta_servico(false, 'Escolha Manhã ou Tarde.', 422);
+}
+
+$hora_servico = $periodo === 'MANHA'
+    ? '06:00:00'
+    : '13:00:00';
+
+$inicio_periodo = $hora_servico;
+
+$fim_periodo = $periodo === 'MANHA'
+    ? '12:00:00'
+    : '17:00:00';
+
+$nome_periodo = $periodo === 'MANHA'
+    ? 'manhã'
+    : 'tarde';
+
+// =====================================================
+// ENDEREÇO
+// =====================================================
+
+$endereco = texto_servico(
+    $dados['endereco_servico'] ?? ''
+);
+
+$numero = texto_servico(
+    $dados['numero_servico'] ?? ''
+);
+
+$bairro = texto_servico(
+    $dados['bairro_servico'] ?? ''
+);
+
+$observacao = texto_servico(
+    $dados['observacao'] ?? ''
+);
+
 if ($endereco === '' || $numero === '') {
-    responder_periodo(
+    resposta_servico(
         false,
-        'Informe o endereço e o número.',
+        'Informe o endereço e o número da faxina.',
         422
     );
 }
@@ -123,111 +181,100 @@ if (
     strlen($bairro) > 100 ||
     strlen($observacao) > 1000
 ) {
-    responder_periodo(
+    resposta_servico(
         false,
-        'Algum campo é muito longo.',
+        'Algum campo é maior que o permitido.',
         422
     );
 }
 
-// VALIDAR DATA
+// =====================================================
+// VALIDAR DATA E LIMITE DAS 14H
+// =====================================================
 
 $fuso = new DateTimeZone('America/Sao_Paulo');
+$agora = new DateTimeImmutable('now', $fuso);
 
-$dia = DateTimeImmutable::createFromFormat(
+$hoje = $agora->format('Y-m-d');
+$hora_atual = $agora->format('H:i:s');
+
+$data_objeto = DateTimeImmutable::createFromFormat(
     '!Y-m-d',
-    $data,
+    $data_servico,
     $fuso
 );
 
-if (!$dia || $dia->format('Y-m-d') !== $data) {
-    responder_periodo(
+if (
+    !$data_objeto ||
+    $data_objeto->format('Y-m-d') !== $data_servico
+) {
+    resposta_servico(
         false,
         'Escolha uma data válida.',
         422
     );
 }
 
-[$inicio, $fim] = $periodos[$periodo];
-
-$inicioReal = DateTimeImmutable::createFromFormat(
-    '!Y-m-d H:i',
-    "$data $inicio",
-    $fuso
-);
-
-if (
-    !$inicioReal ||
-    $inicioReal <= new DateTimeImmutable('now', $fuso)
-) {
-    responder_periodo(
+if ($data_servico < $hoje) {
+    resposta_servico(
         false,
-        'Esse período já começou ou passou.',
+        'Não é possível agendar em datas passadas.',
         422
     );
 }
 
-// CONEXÃO E VERIFICAÇÕES
+// Para HOJE, não permite novos pedidos após as 14h.
+if ($data_servico === $hoje) {
 
-$transacaoAberta = false;
+    if ($hora_atual >= '14:00:00') {
 
-try {
-
-    require_once __DIR__ . '/conexao.php';
-
-    // EXIGIR AVALIAÇÃO PENDENTE
-
-    $sql = "
-        SELECT C.ID_CONTRATACAO
-        FROM CONTRATACAO C
-        WHERE C.ID_CONTRATANTE = ?
-          AND C.STATUS = 'CONCLUIDA'
-          AND NOT EXISTS (
-              SELECT 1
-              FROM AVALIACAO V
-              WHERE V.ID_CONTRATACAO = C.ID_CONTRATACAO
-          )
-        LIMIT 1
-    ";
-
-    $stmt = mysqli_prepare($conexao, $sql);
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        'i',
-        $id_cliente
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $pendente = mysqli_fetch_assoc(
-        mysqli_stmt_get_result($stmt)
-    );
-
-    mysqli_stmt_close($stmt);
-
-    if ($pendente) {
-        responder_periodo(
+        resposta_servico(
             false,
-            'Avalie sua faxina concluída antes de solicitar outra.',
-            409
+            'Após as 14h não é possível solicitar faxina para hoje. Escolha outra data.',
+            422
         );
     }
 
-    // BUSCAR ANÚNCIO ATIVO
+    // A manhã já começou às 06h.
+    if (
+        $periodo === 'MANHA' &&
+        $hora_atual >= '06:00:00'
+    ) {
 
-    $sql = "
-        SELECT A.ID_USUARIO
-        FROM ANUNCIO A
-        INNER JOIN USUARIO U
-            ON U.ID_USUARIO = A.ID_USUARIO
-        WHERE A.ID_ANUNCIO = ?
-          AND A.STATUS = 'ATIVO'
-          AND U.ATIVO = 1
-        LIMIT 1
-    ";
+        resposta_servico(
+            false,
+            'O período da manhã já começou. Escolha a tarde ou uma data futura.',
+            422
+        );
+    }
 
-    $stmt = mysqli_prepare($conexao, $sql);
+    // A tarde pode receber pedido até 13h59,
+    // conforme o limite solicitado.
+}
+
+// =====================================================
+// CONSULTAS E TRANSAÇÃO
+// =====================================================
+
+$transacao = false;
+
+try {
+
+    mysqli_report(
+        MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT
+    );
+
+    require_once __DIR__ . '/conexao.php';
+
+    // Busca o profissional pelo anúncio.
+    $stmt = mysqli_prepare(
+        $conexao,
+        "SELECT ID_USUARIO
+         FROM ANUNCIO
+         WHERE ID_ANUNCIO = ?
+           AND STATUS = 'ATIVO'
+         LIMIT 1"
+    );
 
     mysqli_stmt_bind_param(
         $stmt,
@@ -244,85 +291,153 @@ try {
     mysqli_stmt_close($stmt);
 
     if (!$anuncio) {
-        responder_periodo(
-            false,
+        throw new DomainException(
             'Anúncio indisponível.',
             404
         );
     }
 
-    $id_profissional = (int)$anuncio['ID_USUARIO'];
+    $id_profissional = (int) $anuncio['ID_USUARIO'];
 
-    if ($id_profissional === $id_cliente) {
-        responder_periodo(
-            false,
+    if ($id_profissional === (int) $id_cliente) {
+        throw new DomainException(
             'Você não pode contratar seu próprio anúncio.',
             403
         );
     }
 
-    // INICIAR TRANSAÇÃO
-
     mysqli_begin_transaction($conexao);
-    $transacaoAberta = true;
+    $transacao = true;
 
-    // TRAVAR PROFISSIONAL
-
-    $sql = "
-        SELECT ID_USUARIO
-        FROM USUARIO
-        WHERE ID_USUARIO = ?
-          AND ATIVO = 1
-        FOR UPDATE
-    ";
-
-    $stmt = mysqli_prepare($conexao, $sql);
+    // Trava as contas para evitar reservas simultâneas.
+    $stmt = mysqli_prepare(
+        $conexao,
+        "SELECT ID_USUARIO, ATIVO
+         FROM USUARIO
+         WHERE ID_USUARIO IN (?, ?)
+         ORDER BY ID_USUARIO
+         FOR UPDATE"
+    );
 
     mysqli_stmt_bind_param(
         $stmt,
-        'i',
+        'ii',
+        $id_cliente,
         $id_profissional
     );
 
     mysqli_stmt_execute($stmt);
 
-    $ativo = mysqli_fetch_assoc(
+    $contas = mysqli_fetch_all(
+        mysqli_stmt_get_result($stmt),
+        MYSQLI_ASSOC
+    );
+
+    mysqli_stmt_close($stmt);
+
+    if (count($contas) !== 2) {
+        throw new DomainException(
+            'Conta não encontrada.',
+            404
+        );
+    }
+
+    foreach ($contas as $conta) {
+
+        if ((int) $conta['ATIVO'] !== 1) {
+            throw new DomainException(
+                'Uma das contas está desativada.',
+                403
+            );
+        }
+    }
+
+    // Verifica novamente o anúncio.
+    $stmt = mysqli_prepare(
+        $conexao,
+        "SELECT ID_USUARIO
+         FROM ANUNCIO
+         WHERE ID_ANUNCIO = ?
+           AND STATUS = 'ATIVO'
+         LIMIT 1"
+    );
+
+    mysqli_stmt_bind_param($stmt, 'i', $id_anuncio);
+    mysqli_stmt_execute($stmt);
+
+    $anuncio_atual = mysqli_fetch_assoc(
         mysqli_stmt_get_result($stmt)
     );
 
     mysqli_stmt_close($stmt);
 
-    if (!$ativo) {
+    if (
+        !$anuncio_atual ||
+        (int) $anuncio_atual['ID_USUARIO'] !== $id_profissional
+    ) {
         throw new DomainException(
-            'Profissional indisponível.'
+            'Anúncio não está mais disponível.',
+            409
         );
     }
 
-    // IMPEDIR DUAS RESERVAS NO MESMO PERÍODO
+    // Impede novas solicitações com avaliação pendente.
+    $stmt = mysqli_prepare(
+        $conexao,
+        "SELECT C.ID_CONTRATACAO
+         FROM CONTRATACAO C
+         WHERE C.ID_CONTRATANTE = ?
+           AND C.STATUS = 'CONCLUIDA'
+           AND NOT EXISTS (
+               SELECT 1
+               FROM AVALIACAO A
+               WHERE A.ID_CONTRATACAO = C.ID_CONTRATACAO
+           )
+         LIMIT 1"
+    );
 
-    $sql = "
-        SELECT ID_CONTRATACAO
-        FROM CONTRATACAO
-        WHERE ID_PROFISSIONAL = ?
-          AND DATA_SERVICO = ?
-          AND HORA_SERVICO >= ?
-          AND HORA_SERVICO < ?
-          AND STATUS IN (
-              'SOLICITADA',
-              'ACEITA'
-          )
-        LIMIT 1
-    ";
+    mysqli_stmt_bind_param($stmt, 'i', $id_cliente);
+    mysqli_stmt_execute($stmt);
 
-    $stmt = mysqli_prepare($conexao, $sql);
+    $pendencia = mysqli_fetch_assoc(
+        mysqli_stmt_get_result($stmt)
+    );
+
+    mysqli_stmt_close($stmt);
+
+    if ($pendencia) {
+        throw new DomainException(
+            'Você tem uma faxina concluída aguardando avaliação. Avalie antes de solicitar outra.',
+            409
+        );
+    }
+
+    // =================================================
+    // VERIFICAR SE O PROFISSIONAL ESTÁ OCUPADO
+    // =================================================
+    // CANCELADA e RECUSADA ficam fora da consulta.
+    // Portanto, liberam o período automaticamente.
+    // =================================================
+
+    $stmt = mysqli_prepare(
+        $conexao,
+        "SELECT ID_CONTRATACAO
+         FROM CONTRATACAO
+         WHERE ID_PROFISSIONAL = ?
+           AND DATA_SERVICO = ?
+           AND HORA_SERVICO >= ?
+           AND HORA_SERVICO < ?
+           AND STATUS IN ('SOLICITADA', 'ACEITA')
+         LIMIT 1"
+    );
 
     mysqli_stmt_bind_param(
         $stmt,
         'isss',
         $id_profissional,
-        $data,
-        $inicio,
-        $fim
+        $data_servico,
+        $inicio_periodo,
+        $fim_periodo
     );
 
     mysqli_stmt_execute($stmt);
@@ -335,17 +450,56 @@ try {
 
     if ($ocupado) {
         throw new DomainException(
-            'Esse período já possui uma solicitação. Escolha outro.'
+            "Esse profissional já possui uma solicitação para essa data de {$nome_periodo}. Escolha outro período ou dia.",
+            409
         );
     }
 
-    // CADASTRAR SOLICITAÇÃO
+    // Também impede o cliente de contratar
+    // duas faxinas no mesmo dia e período.
+    $stmt = mysqli_prepare(
+        $conexao,
+        "SELECT ID_CONTRATACAO
+         FROM CONTRATACAO
+         WHERE ID_CONTRATANTE = ?
+           AND DATA_SERVICO = ?
+           AND HORA_SERVICO >= ?
+           AND HORA_SERVICO < ?
+           AND STATUS IN ('SOLICITADA', 'ACEITA')
+         LIMIT 1"
+    );
 
-    // O valor 0.00 é só compatibilidade com
-    // bancos antigos. O preço será combinado.
+    mysqli_stmt_bind_param(
+        $stmt,
+        'isss',
+        $id_cliente,
+        $data_servico,
+        $inicio_periodo,
+        $fim_periodo
+    );
 
-    $sql = "
-        INSERT INTO CONTRATACAO (
+    mysqli_stmt_execute($stmt);
+
+    $cliente_ocupado = mysqli_fetch_assoc(
+        mysqli_stmt_get_result($stmt)
+    );
+
+    mysqli_stmt_close($stmt);
+
+    if ($cliente_ocupado) {
+        throw new DomainException(
+            'Você já tem uma faxina nesse dia e período.',
+            409
+        );
+    }
+
+    // =================================================
+    // SALVAR SOLICITAÇÃO
+    // =================================================
+
+    $stmt = mysqli_prepare(
+        $conexao,
+        "INSERT INTO CONTRATACAO (
             ID_ANUNCIO,
             ID_CONTRATANTE,
             ID_PROFISSIONAL,
@@ -364,10 +518,8 @@ try {
             0.00,
             'SOLICITADA',
             ?
-        )
-    ";
-
-    $stmt = mysqli_prepare($conexao, $sql);
+        )"
+    );
 
     mysqli_stmt_bind_param(
         $stmt,
@@ -375,8 +527,8 @@ try {
         $id_anuncio,
         $id_cliente,
         $id_profissional,
-        $data,
-        $inicio,
+        $data_servico,
+        $hora_servico,
         $endereco,
         $numero,
         $bairro,
@@ -384,39 +536,43 @@ try {
     );
 
     mysqli_stmt_execute($stmt);
-
     mysqli_stmt_close($stmt);
 
     mysqli_commit($conexao);
-    $transacaoAberta = false;
+    $transacao = false;
 
-    responder_periodo(
+    resposta_servico(
         true,
-        'Solicitação enviada! Aguarde a confirmação do profissional.'
+        'Solicitação enviada! Aguarde o profissional aceitar ou recusar. Acompanhe em Minhas faxinas.'
     );
 
-} catch (Throwable $e) {
+} catch (Throwable $erro) {
 
-    if ($transacaoAberta) {
+    if ($transacao && isset($conexao)) {
         mysqli_rollback($conexao);
     }
 
-    if ($e instanceof DomainException) {
-        responder_periodo(
+    if ($erro instanceof DomainException) {
+
+        $codigo = (int) $erro->getCode();
+
+        resposta_servico(
             false,
-            $e->getMessage(),
-            409
+            $erro->getMessage(),
+            $codigo >= 400 && $codigo < 500
+                ? $codigo
+                : 409
         );
     }
 
     error_log(
-        'LimpaLar - solicitar período: ' .
-        $e->getMessage()
+        'LimpaLar - solicitar_servico: ' .
+        $erro->getMessage()
     );
 
-    responder_periodo(
+    resposta_servico(
         false,
-        'Erro ao registrar. Verifique o banco de dados.',
+        'Não foi possível salvar a solicitação. Confira o banco.',
         500
     );
 }

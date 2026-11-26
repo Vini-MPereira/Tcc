@@ -730,9 +730,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // VERIFICA A CADA 10 SEGUNDOS
     // =================================================
 
+    verificarNotificacoes();
+
     setInterval(
         verificarNotificacoes,
-        10000
+        3000
     );
 
     // Atualiza também quando o usuário
